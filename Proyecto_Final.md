@@ -25,6 +25,22 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
   * Base de Datos de Series Temporales (InfluxDB v2).
   * Orquestador de Flujos y Dashboard (Node-RED + Dashboard 2.0).
 
+### 3.1. Simulación del Entorno Físico (Wokwi)
+![image](https://hackmd.io/_uploads/BkZQG305bl.png)
+El montaje hardware se ejecutará en **Wokwi** (usando la placa **ESP32-C3-MINI-1**, la cual requiere elegir el ecosistema `ESP32-C3` en sus dependencias). 
+El cableado electrónico de la placa final usa el siguiente mapa de pines:
+| Componente | Pin (GPIO) ESP32-C3 | Función en el Gemelo |
+| :--- | :---: | :--- |
+| **Sensor DHT22** | `GPIO 1` | Telemetría base: Temperatura y Humedad |
+| **Potenciómetro** | `GPIO 2` | *(Entrada Analógica ADC).* Simula un sensor analógico de MQs/CO2 (Rango 400 - 5000 ppm) |
+| **Botón (Pushbutton)** | `GPIO 3` | Permite alternar la filosofía del Gemelo (Auto/Manual) o forzar la ventilación. Usa resistencia *PULLUP* habilitada por software |
+| **Módulo de Relé** | `GPIO 4` | Actuador final: Simula la puesta en marcha de los motores de extracción del aire (Ventilación) |
+| **LED RGB NeoPixel** | `GPIO 8` | Anillo *WS2812B*. Output visual en tiempo real de la simulación del aire sucio (Verde, Naranja, Rojo) |
+| **LED Testigo Normal** | `GPIO 5` | Chivato de estado de operación y flasheo de acuse de recibo de tramas MQTT |
+
+
+
+
 ---
 
 ## 4. Estructura del Trabajo

@@ -20,6 +20,8 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
 ## 3. Material Necesario y Arquitectura Base
 * **Hardware:** Placa de desarrollo ESP32, Sensor DHT22, Potenciómetro (simulador de sensor de calidad de aire/CO2), Módulo Relé, Anillo LED NeoPixel y un pulsador físico.
 * **Software Local:** Arduino IDE (optimizado con librerías FreeRTOS, `ArduinoJson`, `PubSubClient`, y `Button2`).
+* Al ser un laboratorio virtual, no es necesario disponer del hardware físico, se utilizará Wokwi para simular el entorno físico.
+
 ### 3.2. Servicios Disponibles (Cloud)
 Todos los servicios del ecosistema están accesibles desde el exterior de forma segura a través del puerto estándar HTTPS (443), por lo que no es necesario especificar ningún puerto en la URL. Para acceder a ellos, debes utilizar las credenciales de conexión que se indican en la tarea correspondiente del Campus Virtual.
 

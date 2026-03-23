@@ -24,6 +24,7 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
   * Gestor de Gemelos Digitales (Eclipse Ditto).
   * Base de Datos de Series Temporales (InfluxDB v2).
   * Orquestador de Flujos y Dashboard (Node-RED + Dashboard 2.0).
+  * Plataforma de Monitorización (Grafana).
 
 ### 3.1. Simulación del Entorno Físico (Wokwi)
 ![image](https://hackmd.io/_uploads/BkZQG305bl.png)
@@ -38,8 +39,13 @@ El cableado electrónico de la placa final usa el siguiente mapa de pines:
 | **LED RGB NeoPixel** | `GPIO 8` | Anillo *WS2812B*. Output visual en tiempo real de la simulación del aire sucio (Verde, Naranja, Rojo) |
 | **LED Testigo Normal** | `GPIO 5` | Chivato de estado de operación y flasheo de acuse de recibo de tramas MQTT |
 
+### Entorno Base Preparado en Wokwi
+Puedes acceder a todo el entorno hardware ya emsamblado de fábrica, junto con un pequeño firmware local de prueba (sin las librerías de red todavía), haciendo clic en el siguiente enlace:
+👉 **[Proyecto Hardware Fase 0 - Wokwi](https://wokwi.com/projects/459079537457837057)**
 
-
+Este proyecto te permitirá entender la lógica transaccional de los pines antes de pasar a la nube. Incluye una máquina de estados local que gobierna la circuitería:
+* Al presionar el botón de forma prolongada (durante más de 2 segundos), se alterna lógicamente entre el **Modo Automático** y **Manual** del actuador (el LED físico destellará para confirmarte el cambio de filosofía).
+* Estando exclusivamente en modo Manual, dar una **pulsación corta** sobre el botón conmutará instantáneamente el estado del Relé simulado.
 
 ---
 

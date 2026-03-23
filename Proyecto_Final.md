@@ -415,9 +415,83 @@ void taskBotones(void *pvParameters) {
    xTaskCreate(taskBotones, "UI_Buttons", 3072, NULL, 2, NULL);
    ```
 
-### 7.4 Comprobación Visual
-1. Pulsa el botón del simulador **brevemente**. Si estás en Modo Manual (por defecto), verás que el relé y el LED se encienden, y en Node-RED el interruptor cambia de posición solo.
-2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. Si ahora pulsas brevemente, el sistema ignorará la orden manual porque "el autómata" tiene el control.
-3. ¡Enhorabuena! Has cerrado el círculo: control desde la nube (Fase 2) y control desde el hardware (Fase 3), ambos sincronizados en tiempo real.
+---
+
+## 8. Fase 4: El Motor de Reglas (Inteligencia Local)
+
+### 8.1 Contexto y Objetivos
+Hasta ahora, el ESP32 es un esclavo: lee sensores y obedece botones. Pero un dispositivo IoT avanzado debe ser capaz de **tomar decisiones por sí mismo** basándose en la configuración que le hayamos dado desde la nube.
+
+**El Objetivo:** Implementar la lógica de "Smart Device":
+1. **Control Automático:** Si el aire supera el `threshold_vent`, el ventilador debe encenderse solo (y avisar a la nube).
+2. **Publicación por Delta:** Si la calidad del aire cambia bruscamente (por ejemplo, alguien echa humo cerca del sensor), el ESP32 no debe esperar a los 30 segundos, sino que debe **publicar el dato de inmediato** para que el Gemelo Digital reaccione en tiempo real.
+
+### 8.2 El Código (Solución a implementar)
+Debemos actualizar la tarea `taskReader`. Localiza tu función actual y **reemplaza todo su bucle `while(true)`** por esta versión vitaminada:
+
+```cpp
+  while(true) {
+    // 1. Leer el entorno (Potenciómetro y DHT22)
+    int rawADC = analogRead(POTPIN);
+    int current_ppm = map(rawADC, 0, 4095, 400, 5000);
+    TempAndHumidity newValues = dht.getTempAndHumidity();
+    
+    // 2. Actualizar variables globales
+    global_ppm = current_ppm;
+    if (dht.getStatus() == 0) {
+      global_temp = newValues.temperature;
+      global_hum = newValues.humidity;
+    }
+    
+    // 3. Representamos visualmente el estado del aire instantáneamente
+    mostrarCalidadAire(current_ppm);
+    
+    // 4. MOTOR DE REGLAS 1: Control de Ventilación Automática
+    bool state_changed = false;
+    if (auto_mode == 1) {
+      int deseado = (current_ppm >= threshold_vent) ? 1 : 0;
+      
+      if (deseado != vent_relay) {
+        vent_relay = deseado;
+        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+        
+        Serial.println(DEBUG_STRING + ">>> AUTÓMATA: Cambio de estado a: " + String(vent_relay));
+        state_changed = true; // Forzamos publicación para avisar a Ditto
+      }
+    }
+    
+    // 5. MOTOR DE REGLAS 2: Criterios de Publicación por Red
+    bool time_elapsed = (millis() - last_publish_time >= PERIODO_PUBLICACION);
+    bool delta_exceeded = (abs(current_ppm - last_published_ppm) >= publish_delta);
+    
+    // Si se cumple CUALQUIERA de las condiciones, disparamos el publicador
+    if (time_elapsed || delta_exceeded || state_changed) {
+      
+      if (time_elapsed) {
+        camposPublicacion |= (PUB_TEMP | PUB_HUM | PUB_AIR); // Refresco general
+      }
+      if (delta_exceeded) {
+        camposPublicacion |= PUB_AIR; // Solo notificamos el salto crítico de CO2
+      }
+      if (state_changed) {
+        camposPublicacion |= PUB_RELAY; // Notificamos el cambio del relé
+      }
+
+      last_publish_time = millis();
+      last_published_ppm = current_ppm;
+      
+      Serial.println(DEBUG_STRING + "Evento detectado. Despertando publicador...");
+      xSemaphoreGive(semPublish);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  }
+```
+
+### 8.3 Comprobación Visual
+1. **Prueba del Delta:** Mueve el potenciómetro de Wokwi rápidamente. Verás que el ESP32 publica mensajes MQTT muy seguidos (cada 2 segundos) porque detecta el "salto" de PPM superior al delta configurado.
+2. **Prueba del Umbral:** Pon el ESP32 en **Modo Automático** (vía Dashboard o pulsación larga). Sube el potenciómetro por encima del umbral (1000 ppm por defecto). El relé saltará solo.
+3. ¡Felicidades! Tienes un sistema de control de lazo cerrado totalmente funcional y sincronizado con la nube.
 
 

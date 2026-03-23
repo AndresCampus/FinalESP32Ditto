@@ -688,6 +688,22 @@ Copia e importa este JSON en tu Node-RED:
 
 ---
 
+## 11. Fase Final: Integración de Grafana en el Dashboard
+Como broche de oro a nuestro sistema IoT, vamos a integrar una visualización de datos históricos utilizando **Grafana**. En lugar de saltar entre pestañas, incrustaremos el panel directamente en nuestra App de Node-RED mediante un **Iframe**.
+
+1. **Importa estos nodos:**
+```json
+[{"id":"f8d945fa33172ee6","type":"ui-template","z":"37899cd0b78ff4c0","group":"007924922983f999","page":"","ui":"","name":"Grafana","order":1,"width":"4","height":"14","head":"","format":"<div style=\"display:flex; flex-direction:column; height:100%;\">\n  \n  <div style=\"margin-bottom:10px;\">\n    <a :href=\"msg.payload\" target=\"_blank\">\n      Abrir dashboard de Grafana en otra pestaña\n    </a>\n  </div>\n\n  <iframe\n    :src=\"msg.payload\"\n    style=\"flex:1; width:100%; border:none;\">\n  </iframe>\n\n</div>","storeOutMessages":true,"passthru":true,"resendOnRefresh":true,"templateScope":"local","className":"","x":1280,"y":400,"wires":[[]]},{"id":"ead84aad491a32eb","type":"inject","z":"37899cd0b78ff4c0","name":"URL BASE GRAFANA","props":[{"p":"payload"},{"p":"topic","vt":"str"}],"repeat":"","crontab":"","once":true,"onceDelay":0.1,"topic":"","payload":"https://grafana.iot-uma.es/d/minxssn/panel-esp32-final-micro1","payloadType":"str","x":840,"y":400,"wires":[["16433ad97c43e582"]]},{"id":"16433ad97c43e582","type":"function","z":"37899cd0b78ff4c0","name":"parámetros del dashboard","func":"msg.payload +=\"?orgId=1&from=now-15m&to=now&timezone=browser&refresh=5s&kiosk\"\nreturn msg;","outputs":1,"timeout":0,"noerr":0,"initialize":"","finalize":"","libs":[],"x":1090,"y":400,"wires":[["f8d945fa33172ee6"]]},{"id":"007924922983f999","type":"ui-group","name":"Grafana","page":"5754964613c06fde","width":"4","height":"1","order":3,"showTitle":true,"className":"","visible":"true","disabled":"false","groupType":"default"}]
+```
+
+2. **Configuración:**
+   - Abre el nodo **URL BASE GRAFANA** (el de color naranja tipo Inject).
+   - En el campo `payload`, asegúrate de que la URL apunta a **tu propio dashboard** de Grafana (reemplazando `micro1` por tu usuario si fuera necesario).
+
+Ahora, al desplegar (`Deploy`), verás que tu Dashboard de Node-RED incluye una pestaña o sección dedicada con las gráficas de evolución temporal de temperatura, humedad y calidad del aire.
+
+---
+
 ### ¡FIN DEL PROYECTO!
 Has construido un sistema IoT robusto, basado en un sistema operativo en tiempo real (FreeRTOS) y con una sincronización bidireccional perfecta con su Gemelo Digital. 
 
@@ -695,9 +711,9 @@ Has construido un sistema IoT robusto, basado en un sistema operativo en tiempo 
 - [x] Multitarea FreeRTOS (Scheduler y Prioridades).
 - [x] Comunicación MQTT asíncrona por eventos y semáforos.
 - [x] Gestión de telemetría inteligente (Criterios de Delta y Tiempo).
-- [x] Control remoto vía Commandos RPC (Messages) y Propiedades (Desired).
-- [x] Sincronización de arranque vía API REST (Pull-on-Boot).
-- [x] Interfaz de usuario física avanzada (NeoPixel y Button2).
+- [x] Control remoto avanzado vía Commandos RPC y Propiedades Deseadas.
+- [x] Sincronización bidireccional de arranque (ESP32 y Dashboard).
+- [x] Interfaz HMI física (NeoPixel/Botón) y digital (Node-RED/Grafana).
 
 
 

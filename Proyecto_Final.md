@@ -75,10 +75,13 @@ Antes de empezar a programar, es vital conocer claramente qué estamos a punto d
 
 Para lograr todo ese hito IoT, el desarrollo del proyecto se estructurará en las siguientes **fases incrementales** (que iremos resolviendo paso a paso en los próximos apartados):
 
-1. **Fase 1:** Construcción de Tareas FreeRTOS (Capa Lógica vs Capa de Red).
-2. **Fase 2:** Emparejamiento MQTT bidireccional y modelado en Eclipse Ditto.
-3. **Fase 3:** Sistema asíncrono guiado por eventos (Manejo local de interrupciones del pulsador).
-4. **Fase 4:** Diseño del Panel de Mando reactivo del usuario a través de Node-RED.
+1. **Fase 1:** Telemetría en Tiempo Real (Tarea Publicadora MQTT).
+2. **Fase 2:** Control Remoto y Configuración (Downlink de Propiedades Deseadas).
+3. **Fase 3:** Interacción Física (Gestión de Interrupciones del Pulsador).
+4. **Fase 4:** Inteligencia en el Edge (Motor de Reglas por Deltas y Umbrales).
+5. **Fase 5:** Sincronización de Arranque (Descarga Pull-on-Boot bidireccional).
+6. **Fase 6:** Comandos RPC (Gestión de Mensajes Directos de Refresco).
+7. **Fase Final:** Analítica Visual Avanzada (Integración de Grafana).
 
 ## 4.1. Creación del Gemelo en Eclipse Ditto
 Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, nuestra máxima prioridad es **aprovisionar el modelo de datos virtual** en la nube. Necesitamos indicarle a la plataforma Eclipse Ditto qué atributos físicos y funcionales (Features) va a tener nuestra máquina y qué política de acceso lo gobernará.

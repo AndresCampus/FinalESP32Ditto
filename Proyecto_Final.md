@@ -71,7 +71,7 @@ Antes de empezar a programar, es vital conocer claramente qué estamos a punto d
 5. **UI Física Sensorial:** El usuario *in-situ* siempre estará informado del estado actual gracias a un anillo LED NeoPixel multicolor (que traduce el aire en colores) y un LED clásico que se enciende en paralelo al Relé de ventilación.
 6. **Manejo Manual (HMI Integrado):** Usando un interruptor de control de placa (Botón), el usuario podrá hacer una **Pulsación Larga** para deshabilitar el Modo Automático y tomar control manual del sistema, así como usar **Pulsaciones Cortas** para forzar encendidos y apagados del ventilador a conveniencia, cruzando inmediatamente esa información a la nube.
 7. **Control Remoto vía Gemelo:** Mediante el sistema de *Desired Properties* de Ditto, el administrador de la red será capaz no solo de preconfigurar los parámetros de sensibilidad del dispositivo (`publish_delta` y `threshold_vent`) desde la nube, sino que podrá actuar remotamente sobre el ventilador manipulando sus propiedades.
-8. **Comandos RPC:** El ESP32 será capaz de subscribirse a *Messages* nativos de Eclipse Ditto, habilitando el envío directo del comando `"refresh"` que obligará a la placa a interrumpir todo y realizar un volcado absoluto de datos bajo demanda, fuera de su ciclo de 30 segundos.
+8. **Comandos RPC (Avanzado):** El ESP32 será capaz de subscribirse a *Messages* nativos de Eclipse Ditto, habilitando el envío directo del comando `"refresh"` (que se implementará en una fase avanzada posterior) para obligar a la placa a realizar un volcado absoluto de datos bajo demanda.
 
 Para lograr todo ese hito IoT, el desarrollo del proyecto se estructurará en las siguientes **fases incrementales** (que iremos resolviendo paso a paso en los próximos apartados):
 

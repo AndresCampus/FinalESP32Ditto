@@ -20,7 +20,7 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
 ## 3. Material Necesario y Arquitectura Base
 * **Hardware:** Placa de desarrollo ESP32, Sensor DHT22, Potenciómetro (simulador de sensor de calidad de aire/CO2), Módulo Relé, Anillo LED NeoPixel y un pulsador físico.
 * **Software Local:** Arduino IDE (optimizado con librerías FreeRTOS, `ArduinoJson`, `PubSubClient`, y `Button2`).
-* Al ser un laboratorio virtual, no es necesario disponer del hardware físico, se utilizará Wokwi para simular el entorno físico.
+* Al ser un *laboratorio virtual*, no es necesario disponer del hardware físico, se utilizará Wokwi para simular el entorno físico.
 
 ### 3.2. Servicios Disponibles (Cloud)
 Todos los servicios del ecosistema están accesibles desde el exterior de forma segura a través del puerto estándar HTTPS (443), por lo que no es necesario especificar ningún puerto en la URL. Para acceder a ellos, debes utilizar las credenciales de conexión que se indican en la tarea correspondiente del Campus Virtual.
@@ -60,9 +60,27 @@ Este proyecto te permitirá entender la lógica transaccional de los pines antes
 
 ---
 
-## 4. Estructura del Trabajo
+## 4. Comienzo del Trabajo
 El proyecto se dividirá en las siguientes fases incrementales (que iremos detallando en los próximos apartados):
 1. **Fase 1:** Construcción de Tareas FreeRTOS (Lectura vs Comunicaciones).
 2. **Fase 2:** Emparejamiento MQTT bidireccional y modelado en Eclipse Ditto.
 3. **Fase 3:** Sistema guiado por eventos (Manejo del pulsador con librerías y semáforos).
 4. **Fase 4:** Diseño del Panel de Mando reactivo a través de Node-RED.
+
+---
+
+## 4.1. Punto de Partida: La Plantilla Inicial
+Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el fichero **`ESP32_Plantilla_Inicial.ino`**.
+
+Este fichero ya viene configurado con el paradigma de **FreeRTOS** (eliminando el uso de la función secuencial `loop()`) e incluye dos tareas concurrentes pre-programadas:
+
+1. **`taskMQTTService` (Prioridad Alta):**
+   - Se encarga de levantar y mantener viva la conexión **WiFi** y establecer el circuito **MQTT** contra el *broker*.
+   - Se suscribe automáticamente a los topics de Eclipse Ditto (`mensajes` y `desiredproperties`).
+   - Una vez la red es estable, usa un *Semáforo Binario* (`semMqttReady`) para avisar al resto del sistema de que puede empezar a funcionar.
+2. **`taskReader` (Prioridad Media):**
+   - Tarea en reposo, bloqueada hasta que la tarea MQTT suelta el semáforo `semMqttReady`.
+   - Una vez activa, escanea cada **2 segundos** la temperatura, humedad y el CO2 simulado por el potenciómetro.
+   - Vuelca en la **Consola Serie** el valor de los sensores para que puedas observar gráficamente en Wokwi que el ESP32 está vivo e interactuando con el hardware.
+
+Con esta base 100% funcional aseguramos la capa física de adquisición de datos y la capa de transporte. **A partir de aquí, el documento irá describiendo los retos (Fases) que tendrás que ir programando tú mismo paso a paso.**

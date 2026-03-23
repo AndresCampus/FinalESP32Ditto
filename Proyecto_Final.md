@@ -245,7 +245,7 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
     vTaskDelay(pdMS_TO_TICKS(2000));
     } // <--- Fin del while(true) de taskReader
     ```
-3. **Instanciar la Tarea en el Sistema Operativo:** Ve a la parte final del archivo, concretamente a la función core de configuración `setup()`. Localiza el lugar donde se inicializa la `taskReader` (`xTaskCreate(...)`) e inyecta debajo la orden para que FreeRTOS reserve memoria tu nueva tercera Tarea bajo una prioridad mínima (1):
+3. **Instanciar la Tarea en el Sistema Operativo:** Ve a la parte final del archivo, concretamente a la función core de configuración `setup()`. Localiza el lugar donde se inicializa la `taskReader` (`xTaskCreate(...)`) e inyecta debajo la orden para que FreeRTOS ponga en marcha tu nueva tercera Tarea bajo una prioridad mínima (1):
    ```cpp
    // 3. Tarea de Publicación (Prioridad Baja: 1) Guiada por eventos
    xTaskCreate(taskPublisher, "Publisher", 4096, NULL, 1, NULL);
@@ -257,3 +257,93 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
 3. Verás que cada 2 segundos se escanean localmente en amarillo la temperatura y las ppm del potenciómetro. 
 4. **Alcanzados los primeros 30 segundos de reloj**,  observarás de pronto algo distinto: el hilo de lectura imprime `Periodo (30s) cumplido...`, lo cual desencadena inmediatamente la ejecución de nuestra nueva y durmiente tarea, lanzando el log `>>> [MQTT UPLINK] : {"temperature":24,"humidity":40,"air_quality":400}`. Podrás comprobar en el panel de control de Node-RED que el dispositivo actualiza la telemetría cada 30 segundos.
 5. ¡Felicidades! Acabas de programar una placa ESP32 con sistema operativo FreeRTOS, multitarea de clase industrial operando por eventos y semáforos.
+
+---
+
+## 6. Fase 2: Control Remoto y Configuración (Downlink)
+
+### 6.1 Contexto y Objetivos
+Hasta ahora, la comunicación ha sido unidireccional: del ESP32 a la nube. Sin embargo, el verdadero potencial de un **Gemelo Digital** reside en la capacidad de actuar sobre el dispositivo físico a través de su representación virtual.
+
+En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la nube al dispositivo). Esto nos permitirá:
+1. **Recibir Órdenes (Comandos RPC):** Instrucciones directas como el comando `"refresh"`.
+2. **Sincronizar Estados (Desired Properties):** Cambiar parámetros de funcionamiento (como el umbral de ventilación o el modo de operación) desde el Panel de Control.
+
+**El Objetivo:** Actualizar la función `callback` (el receptor de correos del ESP32) para que sepa parsear el JSON entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
+
+### 6.2 El Código (Solución a implementar)
+Reemplaza la función `callback` vacía que tienes actualmente por esta versión inteligente. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de Ditto:
+
+```cpp
+void callback(char* topic, byte* payload, unsigned int length) {
+  String mensaje = "";
+  for(int i = 0; i < length; i++) {
+    mensaje += (char)payload[i];
+  }
+  
+  Serial.println(DEBUG_STRING + "======= MENSAJE RECIBIDO =======");
+  Serial.println(DEBUG_STRING + "Payload: " + mensaje);
+
+  // --- 1. GESTIÓN DE COMANDOS DIRECTOS (RPC) ---
+  if(String(topic) == topic_COMANDOS) {
+    StaticJsonDocument<512> doc;
+    deserializeJson(doc, mensaje);
+    String path = doc["path"].as<String>();
+    
+    // Comando especial "refresh"
+    if (path.endsWith("/refresh")) {
+      Serial.println(DEBUG_STRING + "¡Orden REFRESH! Forzando telemetría total...");
+      camposPublicacion = PUB_ALL; // Marcamos todos los sensores para envío
+      xSemaphoreGive(semPublish);  // Despertamos al publicador inmediatamente
+    }
+  }
+  
+  // --- 2. GESTIÓN DE PROPIEDADES DESEADAS (DESIRED) ---
+  else if (String(topic) == topic_DESIRED) {
+    StaticJsonDocument<512> doc;
+    deserializeJson(doc, mensaje);
+    bool hayCambios = false;
+
+    // ¿El usuario ha cambiado el modo (AUTO/MANUAL)?
+    if (doc.containsKey("auto_mode")) {
+      auto_mode = doc["auto_mode"]["value"].as<int>();
+      camposPublicacion |= PUB_AUTO_MODE;
+      hayCambios = true;
+    }
+    
+    // ¿El usuario ha cambiado el umbral de ventilación (ppm)?
+    if (doc.containsKey("threshold_vent")) {
+      threshold_vent = doc["threshold_vent"]["value"].as<int>();
+      camposPublicacion |= PUB_THRESHOLD;
+      hayCambios = true;
+    }
+
+    // Si estamos en MODO MANUAL, permitimos encender/apagar el relé desde la nube
+    if (doc.containsKey("vent_relay")) {
+      int nuevo_vr = doc["vent_relay"]["value"].as<int>();
+      if (auto_mode == 0) { 
+        vent_relay = nuevo_vr;
+        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW); // LED indicador físico
+        camposPublicacion |= PUB_RELAY;
+        hayCambios = true;
+      }
+    }
+
+    // Si hubo cambios, avisamos al publicador para que informe a Ditto del nuevo estado real
+    if (hayCambios) {
+      xSemaphoreGive(semPublish);
+    }
+  }
+}
+```
+
+### 6.3 Instrucciones de Inserción
+1. Localiza tu función `callback` actual en Wokwi.
+2. Selecciónala entera y pega el código anterior encima.
+3. **Punto clave:** Fíjate que al final de los cambios hacemos un `xSemaphoreGive(semPublish)`. Esto es vital: cuando cambias algo desde la nube, el ESP32 obedece y automáticamente **le devuelve un mensaje de confirmación** a Ditto para que el Gemelo Digital sepa que la orden se ha ejecutado físicamente.
+
+---
+
+## 6.4. Control desde Node-RED
+*(Próximamente: Añadiremos aquí el flujo necesario para enviar estas órdenes desde tu Dashboard).*

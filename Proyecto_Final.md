@@ -702,6 +702,8 @@ Como broche de oro a nuestro sistema IoT, vamos a integrar una visualización de
 
 Ahora, al desplegar (`Deploy`), verás que tu Dashboard de Node-RED incluye una pestaña o sección dedicada con las gráficas de evolución temporal de la calidad de aire y el límite establecido, de la temperatura y humedad o del estado de configuración del dispositivo y los actuadores, a parte de otra información interesante.
 
+### 11.1. Diseño del Dashboard (Grafana JSON)
+Para que no tengas que diseñar el panel desde cero, aquí tienes la definición completa del Dashboard funcional utilizado en el ejemplo. Este panel incluye indicadores de estado, una aguja para el CO2, y gráficas históricas comparativas.
 Copia este JSON y guárdalo en un archivo de texto (ej. `dashboard.json`):
 
 ```json

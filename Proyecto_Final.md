@@ -67,7 +67,43 @@ El proyecto se dividirá en las siguientes fases incrementales (que iremos detal
 3. **Fase 3:** Sistema guiado por eventos (Manejo del pulsador con librerías y semáforos).
 4. **Fase 4:** Diseño del Panel de Mando reactivo a través de Node-RED.
 
-## 4.1. Punto de Partida: La Plantilla Inicial
+## 4.1. Creación del Gemelo en Eclipse Ditto
+Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, nuestra máxima prioridad es **aprovisionar el modelo de datos virtual** en la nube. Necesitamos indicarle a la plataforma Eclipse Ditto qué atributos físicos y funcionales (Features) va a tener nuestra máquina y qué política de acceso lo gobernará.
+
+Abre un terminal o usa una consola local (Git Bash, WSL, Terminal de macOS/Linux) y ejecuta el siguiente comando *cURL* para registrar estructuralmente tu gemelo digital. 
+
+> [!CAUTION]
+> **⚠️ MUY IMPORTANTE:** El siguiente *script* pertenece al usuario de pruebas `micro1`. Debes **reemplazar cuidadosamente TODAS las apariciones** de la palabra `micro1` por tu **nombre de usuario asignado** en el Moodle, así como reemplazar la contraseña `iQvXjmy7` correspondiente. 
+
+```bash
+curl -X PUT 'https://ditto.iot-uma.es/api/2/things/micro1:ESP32-final' \
+  -u 'micro1:iQvXjmy7' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "policyId": "micro1:policy",
+    "attributes": {
+      "location": "Laboratorio de Electronica",
+      "manufacturer": "micro1",
+      "model": "ESP32-C3"
+    },
+    "features": {
+      "temperature": { "properties": { "value": 25, "unit": "celsius" } },
+      "humidity": { "properties": { "value": 50, "unit": "percentage" } },
+      "air_quality": { "properties": { "value": 400, "unit": "ppm", "range": [400,5000] } },
+      "online": { "properties": { "value": 0, "states": { "0": "Offline", "1": "Online" } } },
+      "vent_relay":{ "properties": { "value": 0, "states": { "0": "OFF", "1": "ON" }}, "desiredProperties": {"value": 0 } },
+      "auto_mode": { "properties": { "value": 0, "states": { "0": "Manual", "1": "Auto" }}, "desiredProperties": {"value": 0 } },
+      "threshold_vent": { "properties": { "value": 1000, "unit": "ppm"}, "desiredProperties": {"value": 1000 } },
+      "publish_delta": { "properties": { "value": 100, "unit": "ppm"}, "desiredProperties": {"value": 100 } }
+    }
+  }'
+```
+
+**Verificación Visual:** Una vez que la consola te devuelva un acuse de recibo de éxito, dirígete con tu navegador web a la UI visual de Ditto (👉 **[https://ditto.iot-uma.es/ui/](https://ditto.iot-uma.es/ui/)**). Inicia sesión con tus credenciales, localiza tu *Thing* (ej. `micro1:ESP32-final`) y comprueba gráficamente que todos los sub-árboles JSON de `features` han aparecido correctamente.
+
+---
+
+## 4.2. Punto de Partida: La Plantilla Inicial
 Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el proyecto Wokwi con el firmware inicial 👉 **[Proyecto inicial - Wokwi](https://wokwi.com/projects/459309993466875905)**
 
 Este proyecto ya viene programado con el modelo de programación concurrente de **FreeRTOS** (eliminando el uso de la función secuencial `loop()`) e incluye dos tareas concurrentes programadas:
@@ -156,8 +192,8 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
  
     // A dormir 2 segundos cediendo la CPU de vuelta al OS
     vTaskDelay(pdMS_TO_TICKS(2000));
-  } // <--- Fin del while(true) de taskReader
-   ```
+    } // <--- Fin del while(true) de taskReader
+    ```
 3. **Instanciar la Tarea en el Sistema Operativo:** Ve a la parte final del archivo, concretamente a la función core de configuración `setup()`. Localiza el lugar donde se inicializa la `taskReader` (`xTaskCreate(...)`) e inyecta debajo la orden para que FreeRTOS reserve memoria tu nueva tercera Tarea bajo una prioridad mínima (1):
    ```cpp
    // 3. Tarea de Publicación (Prioridad Baja: 1) Guiada por eventos

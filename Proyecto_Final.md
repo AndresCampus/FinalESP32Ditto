@@ -78,7 +78,8 @@ Este fichero ya viene configurado con el paradigma de **FreeRTOS** (eliminando e
    - Una vez la red es estable, usa un *Semáforo Binario* (`semMqttReady`) para avisar al resto del sistema de que puede empezar a funcionar.
 2. **`taskReader` (Prioridad Media):**
    - Tarea en reposo, bloqueada hasta que la tarea MQTT suelta el semáforo `semMqttReady`.
-   - Una vez activa, escanea cada **2 segundos** la temperatura, humedad y el CO2 simulado por el potenciómetro.
-   - Vuelca en la **Consola Serie** el valor de los sensores para que puedas observar gráficamente en Wokwi que el ESP32 está vivo e interactuando con el hardware.
+   - Una vez activa, escanea cada **2 segundos** la temperatura, humedad y el nivel de CO2 simulado por el potenciómetro.
+   - Traduce instantáneamente ese nivel de CO2 en un código de colores sobre el **Anillo LED NeoPixel** (Verde = Óptimo, Naranja = Regular, Rojo = Crítico) para dar *feedback* visual físico.
+   - Vuelca en la **Consola Serie** el valor exacto de los sensores para que puedas observar gráficamente en Wokwi que el ESP32 está vivo e interactuando con el hardware.
 
 Con esta base 100% funcional aseguramos la capa física de adquisición de datos y la capa de transporte. **A partir de aquí, el documento irá describiendo los retos (Fases) que tendrás que ir programando tú mismo paso a paso.**

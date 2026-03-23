@@ -61,11 +61,24 @@ Este proyecto te permitirá entender la lógica transaccional de los pines antes
 ---
 
 ## 4. Comienzo del Trabajo
-El proyecto se dividirá en las siguientes fases incrementales (que iremos detallando en los próximos apartados):
-1. **Fase 1:** Construcción de Tareas FreeRTOS (Lectura vs Comunicaciones).
+
+Antes de empezar a programar, es vital conocer claramente qué estamos a punto de construir. Al finalizar todas las fases, el dispositivo físico y su gemelo digital contarán con el siguiente abanico de **funcionalidades y lógica combinada (Edge + Cloud)**:
+
+1. **Adquisición Automática:** El dispositivo leerá localmente sus sensores (Temperatura y Humedad vía DHT22, y Calidad de Aire simulada vía Potenciómetro ADC) cada 2 segundos ininterrumpidamente.
+2. **Telemetría Inteligente (Heartbeat):** Publicará regularmente todo su estado de forma programada por MQTT cada 30 segundos (Periodo de refresco).
+3. **Telemetría Basada en Eventos (Deltas):** Si el ESP32 detecta cambios bruscos en la calidad del aire superiores a una diferencia programable (`publish_delta`), cortocircuitará el tiempo de espera y publicará instantáneamente la alerta de red, ahorrando ancho de banda el resto del tiempo.
+4. **Auto-Gobernador Dinámico:** Monitorizará continuamente el aire para actuar directamente, y sin latencia de red, sobre un actuador duro (Relé). Abriendo así un sistema de ventilación de emergencia en el instante en el que supere un umbral de peligro (`threshold_vent`) programable.
+5. **UI Física Sensorial:** El usuario *in-situ* siempre estará informado del estado actual gracias a un anillo LED NeoPixel multicolor (que traduce el aire en colores) y un LED clásico que se enciende en paralelo al Relé de ventilación.
+6. **Manejo Manual (HMI Integrado):** Usando un interruptor de control de placa (Botón), el usuario podrá hacer una **Pulsación Larga** para deshabilitar el Modo Automático y tomar control manual del sistema, así como usar **Pulsaciones Cortas** para forzar encendidos y apagados del ventilador a conveniencia, cruzando inmediatamente esa información a la nube.
+7. **Control Remoto vía Gemelo:** Mediante el sistema de *Desired Properties* de Ditto, el administrador de la red será capaz no solo de preconfigurar los parámetros de sensibilidad del dispositivo (`publish_delta` y `threshold_vent`) desde la nube, sino que podrá actuar remotamente sobre el ventilador manipulando sus propiedades.
+8. **Comandos RPC:** El ESP32 será capaz de subscribirse a *Messages* nativos de Eclipse Ditto, habilitando el envío directo del comando `"refresh"` que obligará a la placa a interrumpir todo y realizar un volcado absoluto de datos bajo demanda, fuera de su ciclo de 30 segundos.
+
+Para lograr todo ese hito IoT, el desarrollo del proyecto se estructurará en las siguientes **fases incrementales** (que iremos resolviendo paso a paso en los próximos apartados):
+
+1. **Fase 1:** Construcción de Tareas FreeRTOS (Capa Lógica vs Capa de Red).
 2. **Fase 2:** Emparejamiento MQTT bidireccional y modelado en Eclipse Ditto.
-3. **Fase 3:** Sistema guiado por eventos (Manejo del pulsador con librerías y semáforos).
-4. **Fase 4:** Diseño del Panel de Mando reactivo a través de Node-RED.
+3. **Fase 3:** Sistema asíncrono guiado por eventos (Manejo local de interrupciones del pulsador).
+4. **Fase 4:** Diseño del Panel de Mando reactivo del usuario a través de Node-RED.
 
 ## 4.1. Creación del Gemelo en Eclipse Ditto
 Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, nuestra máxima prioridad es **aprovisionar el modelo de datos virtual** en la nube. Necesitamos indicarle a la plataforma Eclipse Ditto qué atributos físicos y funcionales (Features) va a tener nuestra máquina y qué política de acceso lo gobernará.
@@ -127,11 +140,11 @@ Como complemento a la simulación física, también contarás desde el primer mo
 
 Este flujo inicial ya viene configurado para suscribirse automáticamente al topic de telemetría de Ditto y generar una interfaz gráfica amigable (Dashboard 2.0).
 > [!NOTE]
-> Puesto que tu *Plantilla Inicial* en C++ todavía no tiene programada la Tarea Publicadora, en este primer estadio tu Dashboard visual únicamente te confirmará si la placa ESP32 figura como **ONLINE** de cara a Ditto al arrancar Wokwi, pero las gráficas de telemetría y actuadores mostrarán sus valores por defecto hasta que tú mismo superes la Fase 1 programando el publicador interno MQTT.
+> Puesto que tu *Plantilla Inicial* en C++ todavía no tiene programada la Tarea Publicadora, en este primer estadio tu Dashboard visual únicamente te confirmará si la placa ESP32 figura como **ONLINE** de cara a Ditto al arrancar Wokwi, pero la información de telemetría se mostrará cuando programes la Tarea Publicadora en la sección 5.
 
 Para incorporar este proyecto visual a tu instancia, no necesitas descargar ningún archivo de la asignatura, solo sigue estos facilísimos pasos nativos de Node-RED:
 
-1. Selecciona y **Copia (Ctrl+C)** íntegramente todo este bloque de código JSON inferior.
+1. **Copia (Copy code)** íntegramente todo este bloque de código JSON inferior.
 2. Abre la URL de tu entorno privado (ej. `micro1.iot-uma.es`) e inicia sesión en Node-RED con tus credenciales.
 3. Ve a la esquina superior derecha y haz clic en el botón de Menú Principal (`☰`) > **Import**.
 4. Pega el JSON con (Ctrl+V) en el gran recuadro central que se despliega y pulsa el botón rosa de confirmar la Importación. ¡Aparecerá el flujo completo con todos sus nodos UI ensamblados!

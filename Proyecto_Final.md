@@ -29,6 +29,7 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
 
 ### 3.1. Simulación del Entorno Físico (Wokwi)
 ![image](https://hackmd.io/_uploads/BkZQG305bl.png)
+![image](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32c3/_images/esp32-c3-devkitm-1-v1-pinout.png)
 El montaje hardware se ejecutará en **Wokwi** (usando la placa **[ESP32-C3-DevKitM-1](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32c3/hw-reference/esp32c3/user-guide-devkitm-1.html#esp32-c3-devkitm-1)**, la cual requiere elegir el ecosistema `ESP32-C3` en sus dependencias). 
 El cableado electrónico de la placa final usa el siguiente mapa de pines:
 | Componente | Pin (GPIO) ESP32-C3 | Función en el Gemelo |

@@ -265,14 +265,12 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
 ### 6.1 Contexto y Objetivos
 Hasta ahora, la comunicación ha sido unidireccional: del ESP32 a la nube. Sin embargo, el verdadero potencial de un **Gemelo Digital** reside en la capacidad de actuar sobre el dispositivo físico a través de su representación virtual.
 
-En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la nube al dispositivo). Esto nos permitirá:
-1. **Recibir Órdenes (Comandos RPC):** Instrucciones directas como el comando `"refresh"`.
-2. **Sincronizar Estados (Desired Properties):** Cambiar parámetros de funcionamiento (como el umbral de ventilación o el modo de operación) desde el Panel de Control.
+En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la nube al dispositivo). Esto nos permitirá **Sincronizar Estados (Desired Properties)**: Cambiar parámetros de funcionamiento (como el umbral de ventilación o el modo de operación) desde el Panel de Control.
 
-**El Objetivo:** Actualizar la función `callback` (el receptor de correos del ESP32) para que sepa parsear el JSON entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
+**El Objetivo:** Actualizar la función `callback` (el receptor de correos del ESP32) para que sepa parsear el JSON de tipo *desired* entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
 
 ### 6.2 El Código (Solución a implementar)
-Reemplaza la función `callback` vacía que tienes actualmente por esta versión inteligente. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de Ditto:
+Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas:
 
 ```cpp
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -284,22 +282,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(DEBUG_STRING + "======= MENSAJE RECIBIDO =======");
   Serial.println(DEBUG_STRING + "Payload: " + mensaje);
 
-  // --- 1. GESTIÓN DE COMANDOS DIRECTOS (RPC) ---
-  if(String(topic) == topic_COMANDOS) {
-    StaticJsonDocument<512> doc;
-    deserializeJson(doc, mensaje);
-    String path = doc["path"].as<String>();
-    
-    // Comando especial "refresh"
-    if (path.endsWith("/refresh")) {
-      Serial.println(DEBUG_STRING + "¡Orden REFRESH! Forzando telemetría total...");
-      camposPublicacion = PUB_ALL; // Marcamos todos los sensores para envío
-      xSemaphoreGive(semPublish);  // Despertamos al publicador inmediatamente
-    }
-  }
-  
-  // --- 2. GESTIÓN DE PROPIEDADES DESEADAS (DESIRED) ---
-  else if (String(topic) == topic_DESIRED) {
+  // --- GESTIÓN DE PROPIEDADES DESEADAS (DESIRED) ---
+  if (String(topic) == topic_DESIRED) {
     StaticJsonDocument<512> doc;
     deserializeJson(doc, mensaje);
     bool hayCambios = false;

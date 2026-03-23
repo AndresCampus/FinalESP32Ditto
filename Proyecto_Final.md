@@ -329,5 +329,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 ---
 
-## 6.4. Control desde Node-RED
-*(Próximamente: Añadiremos aquí el flujo necesario para enviar estas órdenes desde tu Dashboard).*
+## 6.4. Control desde Node-RED (Capa de Aplicación)
+Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos añadir una lógica que capture tus interacciones (mover un slider, pulsar un botón) y las envíe a la API REST de Eclipse Ditto.
+
+### Instrucciones de Integración:
+1. **Importa los nuevos nodos:** Copia el JSON inferior e impórtalo en tu flujo actual de Node-RED.
+2. **Conexión de Cables:** Localiza en tu flujo los nodos de entrada (Sliders de umbral/delta y Botones de relé/modo) que actualmente van conectados al nodo de debug llamado `"Ordenes Ditto"`. **Desconéctalos de ese debug y conéctalos a la entrada de la nueva función `"Envío desired property..."`**.
+3. **Despliegue:** Pulsa **Deploy**. Ahora, cuando muevas el slider en el Dashboard, se generará una petición HTTP hacia Ditto, que a su vez enviará un mensaje MQTT de tipo *desired* a tu ESP32.
+
+```json
+[{"id":"6ab9d286db100cd2","type":"debug","z":"37899cd0b78ff4c0","name":"debug 52","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"true","targetType":"full","statusVal":"","statusType":"auto","x":1200,"y":660,"wires":[]},{"id":"3e36033e693905ad","type":"function","z":"37899cd0b78ff4c0","name":"Envío desired property desde  APP a Ditto para el dispositivo","func":"const usuario = flow.get(\"usuario\");\nconst claveusuario = flow.get(\"claveusuario\");\nconst dispositivo = flow.get(\"dispositivo\");\nconst credenciales = usuario+\":\"+claveusuario;\nconst credencialesBase64 = Buffer.from(credenciales).toString('base64');\n\n\n// 1. Especificamos que vamos a hacer un PUT (para forzar la actualización o creación)\nmsg.method = \"PUT\";\n\n\n// 2. Definimos la URL completa (incluyendo el parámetro timeout)\nmsg.url = \"http://10.10.10.201:8080/api/2/things/\" + \n           usuario + \":\" + dispositivo + \"/features/\"+msg.topic+\"/desiredProperties\";\n\n// 3. Indicamos que vamos a mandar un JSON\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Authorization\": \"Basic \"+ credencialesBase64\n};\n// 4. El \"Estado Deseado\" de la válvula (Payload limpio, sin comandos extraños)\nmsg.payload = {\n    \"value\": msg.payload\n};\n\nreturn msg;\n\nreturn msg;","outputs":1,"timeout":0,"noerr":0,"initialize":"","finalize":"","libs":[],"x":900,"y":600,"wires":[["f9948ae7d03da872","6ab9d286db100cd2"]]},{"id":"f9948ae7d03da872","type":"http request","z":"37899cd0b78ff4c0","name":"","method":"use","ret":"obj","paytoqs":"ignore","url":"","tls":"","persist":false,"proxy":"","insecureHTTPParser":false,"authType":"","senderr":false,"headers":[],"x":1230,"y":600,"wires":[["b454cc44078df9b5"]]},{"id":"b454cc44078df9b5","type":"debug","z":"37899cd0b78ff4c0","name":"debug 53","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"payload","targetType":"msg","statusVal":"","statusType":"auto","x":1400,"y":600,"wires":[]}]
+```
+
+> [!NOTE]
+> La función utiliza `flow.get("usuario")` y `flow.get("claveusuario")`, por lo que es vital que los nodos de **Configuración** del principio del flujo tengan tus datos reales para que la API de Ditto te autorice el cambio.
+

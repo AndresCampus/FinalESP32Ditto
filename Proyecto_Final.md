@@ -68,7 +68,7 @@ El proyecto se dividirá en las siguientes fases incrementales (que iremos detal
 4. **Fase 4:** Diseño del Panel de Mando reactivo a través de Node-RED.
 
 ## 4.1. Punto de Partida: La Plantilla Inicial
-Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el fichero **`ESP32_Plantilla_Inicial.ino`**.
+Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el proyecto Wokwi con el firmware inicial 👉 **[Proyecto inicial - Wokwi](https://wokwi.com/projects/459309993466875905)**
 
 Este fichero ya viene configurado con el paradigma de **FreeRTOS** (eliminando el uso de la función secuencial `loop()`) e incluye dos tareas concurrentes pre-programadas:
 

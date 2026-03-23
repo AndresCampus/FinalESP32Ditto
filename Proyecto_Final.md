@@ -73,7 +73,7 @@ Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, 
 Abre un terminal o usa una consola local (Git Bash, WSL, Terminal de macOS/Linux) y ejecuta el siguiente comando *cURL* para registrar estructuralmente tu gemelo digital. 
 
 > [!CAUTION]
-> **⚠️ MUY IMPORTANTE:** El siguiente *script* pertenece al usuario de pruebas `micro1`. Debes **reemplazar cuidadosamente TODAS las apariciones** de la palabra `micro1` por tu **nombre de usuario asignado** en el Moodle, así como reemplazar la contraseña correspondiente. 
+> **⚠️ MUY IMPORTANTE:** El siguiente *script* pertenece al usuario de pruebas `micro1`. Debes **reemplazar cuidadosamente TODAS las apariciones** de la palabra `micro1` por tu **nombre de usuario asignado** en el Moodle, así como reemplazar la contraseña correspondiente. El nombre del **gemelo digital** debe ser `ESP32-final`.
 
 ```bash
 curl -X PUT 'https://ditto.iot-uma.es/api/2/things/micro1:ESP32-final' \

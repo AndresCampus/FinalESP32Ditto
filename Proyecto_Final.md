@@ -562,9 +562,10 @@ void pull_on_boot() {
 ```
 
 ### 9.3 Comprobación Visual
-1. Cambia el umbral a **2000** desde el Dashboard de Node-RED.
-2. Pulsa el botón de **Reset** del ESP32 en Wokwi.
-3. Observa la consola serie: verás cómo tras conectar al WiFi, el dispositivo descarga los datos y verás el mensaje `Sincronización completada`. Si imprimes el valor del umbral, verás que ya vale 2000 sin que hayas tenido que tocar nada.
+1. Para el simulador de Wokwi
+2. En el dashboard de Node-RED, cambia el umbral u otro parámetro.
+3. Reinicia la ejecución del simulador de Wokwi.
+4. Observa la consola serie: verás cómo tras conectar al WiFi, el dispositivo descarga los datos desde el Gemelo Digital y verás el mensaje `Sincronización completada`. En el Dashboard de Node-RED verás que el umbral ha cambiado al valor que has introducido en el paso 2.
 
 ---
 

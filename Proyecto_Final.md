@@ -336,7 +336,7 @@ Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos a
 1. **Importa los nuevos nodos:** Copia el JSON inferior e impórtalo en tu flujo actual de Node-RED.
 2. **Conexión de Cables:** Localiza en tu flujo los nodos de entrada (Sliders de umbral/delta y Botones de relé/modo) que actualmente van conectados al nodo de debug llamado `"Ordenes Ditto"`. **Conéctalos a la entrada de la nueva función `"Envío desired property..."`**.
 3. **Despliegue:** Pulsa **Deploy**. Ahora, cuando muevas el slider en el Dashboard, se generará una petición HTTP hacia Ditto, que a su vez enviará un mensaje MQTT de tipo *desired* a tu ESP32.
-4. Comprueba que el gemelo digital se actualiza con los nuevos valores que envíes desde el dashboard.
+4. Comprueba que el gemelo digital se actualiza con los nuevos valores que envíes desde el dashboard y que el dispositivo responde a los cambios.
 
 ```json
 [{"id":"6ab9d286db100cd2","type":"debug","z":"37899cd0b78ff4c0","name":"debug 52","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"true","targetType":"full","statusVal":"","statusType":"auto","x":1200,"y":660,"wires":[]},{"id":"3e36033e693905ad","type":"function","z":"37899cd0b78ff4c0","name":"Envío desired property desde  APP a Ditto para el dispositivo","func":"const usuario = flow.get(\"usuario\");\nconst claveusuario = flow.get(\"claveusuario\");\nconst dispositivo = flow.get(\"dispositivo\");\nconst credenciales = usuario+\":\"+claveusuario;\nconst credencialesBase64 = Buffer.from(credenciales).toString('base64');\n\n\n// 1. Especificamos que vamos a hacer un PUT (para forzar la actualización o creación)\nmsg.method = \"PUT\";\n\n\n// 2. Definimos la URL completa (incluyendo el parámetro timeout)\nmsg.url = \"http://10.10.10.201:8080/api/2/things/\" + \n           usuario + \":\" + dispositivo + \"/features/\"+msg.topic+\"/desiredProperties\";\n\n// 3. Indicamos que vamos a mandar un JSON\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Authorization\": \"Basic \"+ credencialesBase64\n};\n// 4. El \"Estado Deseado\" de la válvula (Payload limpio, sin comandos extraños)\nmsg.payload = {\n    \"value\": msg.payload\n};\n\nreturn msg;\n\nreturn msg;","outputs":1,"timeout":0,"noerr":0,"initialize":"","finalize":"","libs":[],"x":900,"y":600,"wires":[["f9948ae7d03da872","6ab9d286db100cd2"]]},{"id":"f9948ae7d03da872","type":"http request","z":"37899cd0b78ff4c0","name":"","method":"use","ret":"obj","paytoqs":"ignore","url":"","tls":"","persist":false,"proxy":"","insecureHTTPParser":false,"authType":"","senderr":false,"headers":[],"x":1230,"y":600,"wires":[["b454cc44078df9b5"]]},{"id":"b454cc44078df9b5","type":"debug","z":"37899cd0b78ff4c0","name":"debug 53","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"payload","targetType":"msg","statusVal":"","statusType":"auto","x":1400,"y":600,"wires":[]}]
@@ -344,4 +344,80 @@ Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos a
 
 > [!NOTE]
 > La función utiliza `flow.get("usuario")` y `flow.get("claveusuario")`, por lo que es vital que los nodos de **Configuración** del principio del flujo tengan tus datos reales para que la API de Ditto te autorice el cambio.
+
+---
+
+## 7. Fase 3: Interacción Física (El Pulsador)
+
+### 7.1 Contexto y Objetivos
+Un dispositivo IoT no debe depender exclusivamente de la nube para ser funcional. El usuario que está frente a la máquina debe poder actuar sobre ella de forma inmediata. Sin embargo, en un sistema de **Gemelo Digital**, cualquier cambio físico (pulsar un botón) debe verse reflejado instantáneamente en el panel de control remoto.
+
+**El Objetivo:** Implementar un sistema de control híbrido. El botón físico permitirá:
+1. **Pulsación Corta:** Encender/Apagar el ventilador (solo si el modo es Manual).
+2. **Pulsación Larga (2 segundos):** Cambiar entre Modo Automático (el sensor manda) y Modo Manual (la persona manda).
+
+### 7.2 El Código (Solución a implementar)
+Copia este bloque que contiene los "manejadores" (callbacks) del botón y su tarea dedicada de escaneo:
+
+```cpp
+// --- Callbacks de la librería Button2 ---
+void clickCorto(Button2& btn) {
+  // Sólo conmutamos a mano si estamos en el modo Manual
+  if (auto_mode == 0) {
+    vent_relay = (vent_relay == 1) ? 0 : 1; 
+    digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+    digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+    
+    Serial.println(DEBUG_STRING + ">>> [BOTÓN] Relé conmutado a: " + String(vent_relay));
+    camposPublicacion |= PUB_RELAY; // Marcamos para informar a la nube
+    xSemaphoreGive(semPublish);     // Despertamos al publicador para sincronizar Ditto
+  } else {
+    Serial.println(DEBUG_STRING + ">>> [BOTÓN] Acción ignorada: El Modo Automático está activo.");
+  }
+}
+
+void clickLargo(Button2& btn) {
+  auto_mode = (auto_mode == 1) ? 0 : 1; // Alternamos el modo global
+  
+  if (auto_mode == 1) {
+    Serial.println(DEBUG_STRING + ">>> [BOTÓN] MODO AUTOMÁTICO ACTIVADO");
+  } else {
+    Serial.println(DEBUG_STRING + ">>> [BOTÓN] MODO MANUAL ACTIVADO");
+  }
+  
+  camposPublicacion |= PUB_AUTO_MODE; // Marcamos el cambio de modo
+  xSemaphoreGive(semPublish);         // Sincronizamos con el Gemelo Digital
+}
+
+// --- TAREA 4: Gestión del Pulsador ---
+void taskBotones(void *pvParameters) {
+  info_tarea_actual();
+  
+  boton.begin(BOTONPIN);
+  boton.setLongClickTime(2000); // 2 segundos para el modo manual/auto
+  boton.setTapHandler(clickCorto);
+  boton.setLongClickDetectedHandler(clickLargo);
+  
+  Serial.println(DEBUG_STRING + "Lógica de botones lista.");
+
+  while(true) {
+    boton.loop(); // Escanea el estado del pin físico
+    vTaskDelay(pdMS_TO_TICKS(15)); // Respira 15ms (60Hz de refresco)
+  }
+}
+```
+
+### 7.3 Instrucciones de Inserción
+1. **Pega el código:** Inserta el bloque anterior justo antes de la función `setup()`.
+2. **Lanza la Tarea:** En la función `setup()`, busca donde creaste la tarea del publicador e inyecta debajo esta cuarta tarea:
+   ```cpp
+   // 4. Tarea de Interfaz de Usuario (Prioridad Media: 2)
+   xTaskCreate(taskBotones, "UI_Buttons", 3072, NULL, 2, NULL);
+   ```
+
+### 7.4 Comprobación Visual
+1. Pulsa el botón del simulador **brevemente**. Si estás en Modo Manual (por defecto), verás que el relé y el LED se encienden, y en Node-RED el interruptor cambia de posición solo.
+2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. Si ahora pulsas brevemente, el sistema ignorará la orden manual porque "el autómata" tiene el control.
+3. ¡Enhorabuena! Has cerrado el círculo: control desde la nube (Fase 2) y control desde el hardware (Fase 3), ambos sincronizados en tiempo real.
+
 

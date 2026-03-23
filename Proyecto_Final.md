@@ -173,6 +173,24 @@ Una vez confirmes el estado **ONLINE**, ¡estás listo para empezar a programar 
 
 ---
 
+## 4.5. Sincronización Inicial del Dashboard (Node-RED)
+Aunque ya veas el estado **ONLINE**, notarás que los valores de temperatura, humedad o el estado del relé no aparecen reflejados todavía. Esto se debe a que el Dashboard está esperando recibir los datos por MQTT, y la placa aún no envía nada.
+
+Para mejorar la experiencia de usuario, vamos a añadir un pequeño flujo de "descarga inicial" que, nada más abrir el Dashboard, consulte a Ditto vía API REST y rellene todos los huecos automáticamente.
+
+1. **Importa estos nodos:**
+```json
+[{"id":"8fa5da13e176568f","type":"function","z":"37899cd0b78ff4c0","name":"pull-on-boot de todas las features Ditto","func":"const usuario = flow.get(\"usuario\");\nconst claveusuario = flow.get(\"claveusuario\");\nconst dispositivo = flow.get(\"dispositivo\");\nconst credenciales = usuario + \":\" + claveusuario;\nconst credencialesBase64 = Buffer.from(credenciales).toString('base64');\n\n// Apuntamos al endpoint raíz general que devuelve TODAS las features (GET)\nmsg.method = \"GET\";\nmsg.url = \"http://10.10.10.201:8080/api/2/things/\"+usuario+\":\"+dispositivo+\"/features/\";\n\nmsg.headers = {\n    \"Accept\": \"application/json\",\n    \"Authorization\": \"Basic \" + credencialesBase64\n};\n\nreturn msg;\n","outputs":1,"timeout":0,"noerr":0,"initialize":"","finalize":"","libs":[],"x":550,"y":40,"wires":[["6cf910729146d1ef"]]},{"id":"6cf910729146d1ef","type":"http request","z":"37899cd0b78ff4c0","name":"","method":"use","ret":"obj","paytoqs":"ignore","url":"","tls":"","persist":false,"proxy":"","insecureHTTPParser":false,"authType":"","senderr":false,"headers":[],"x":790,"y":40,"wires":[["e05188b05ee21964","67213998d480ddd2"]]},{"id":"e05188b05ee21964","type":"function","z":"37899cd0b78ff4c0","name":"respuesta como telemetría","func":"let p = msg.payload || {};\n// Cogemos \"iot/telemetry/micro1/ESP32-final\" y lo partimos en un Array:\n// partes[0] = \"iot\"\n// partes[1] = \"telemetry\"\n// partes[2] = \"micro1\"\n// partes[3] = \"ESP32-final\"\nlet ns = \"Desconocido\";\nlet thId = \"Dispositivo\";\nif (msg.topic) {\n    let partes = msg.topic.split('/');\n    if (partes.length >= 4) {\n        ns = partes[2];\n        thId = partes[3];\n    }\n}\n// 1. Verificamos que Ditto respondió un 200 OK\nif (msg.statusCode !== 200) {\n    node.error(\"Fallo Pull-On-Boot en Node-RED: \" + msg.statusCode);\n    return null; // Detiene el flujo\n}\n\nlet features = msg.payload;\n\n// 2. Pequeño helper para extraer el valor reportado evitando crasheos\nlet extrae = (featureName) => {\n    try {\n        return features[featureName].properties.value;\n    } catch (e) {\n        return null;\n    }\n};\n\n\n\n// 3. Reconstruimos y simulamos el payload MQTT plano que espera la pantalla\nlet telemetria = {\n    namespace: ns,\n    thingId: thId,\n    temperature: extrae(\"temperature\"),\n    humidity: extrae(\"humidity\"),\n    air_quality: extrae(\"air_quality\"),\n    vent_relay: extrae(\"vent_relay\"),\n    auto_mode: extrae(\"auto_mode\"),\n    threshold_vent: extrae(\"threshold_vent\"),\n    publish_delta: extrae(\"publish_delta\"),\n    online: extrae(\"online\")\n};\n\n// Sustituimos el inmenso JSON del HTTP por nuestro JSON aplanado\nmsg.payload = telemetria;\nreturn msg;\n\nreturn msg;","outputs":1,"timeout":0,"noerr":0,"initialize":"","finalize":"","libs":[],"x":1020,"y":40,"wires":[["26af635b0579b621","dec9f2fe17eedb10"]]},{"id":"dec9f2fe17eedb10","type":"debug","z":"37899cd0b78ff4c0","name":"debug 57","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"false","statusVal":"","statusType":"auto","x":1300,"y":40,"wires":[]}]
+```
+
+2. **Cableado:**
+   - Busca el nodo **Inject** llamado `inyectar¹` (el que tiene el símbolo de ejecución al inicio). Conéctalo a la entrada del nuevo nodo `pull-on-boot de todas las features Ditto`.
+   - Conecta la salida del nodo `respuesta como telemetría` directamente a la entrada del nodo llamado `function telemetría` que ya tenías en el flujo anterior.
+
+Con este cambio, cada vez que hagas un *Deploy* o recargues el flujo, el Dashboard se auto-completará con los valores guardados en el Gemelo Digital, ofreciendo una sensación de respuesta instantánea.
+
+---
+
 ## 5. Fase 1: Añadiendo la Tarea Publicadora (Event-Driven)
 
 ### 5.1 Contexto y Objetivos

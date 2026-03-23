@@ -415,6 +415,10 @@ void taskBotones(void *pvParameters) {
    xTaskCreate(taskBotones, "UI_Buttons", 3072, NULL, 2, NULL);
    ```
 
+### 7.4 Comprobación Visual
+1. Pulsa el botón del simulador **brevemente**. Si estás en Modo Manual (por defecto), verás que el relé y el LED se encienden, y en Node-RED el interruptor cambia de posición solo.
+2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. Si ahora pulsas brevemente, el sistema ignorará la orden manual porque "el autómata" tiene el control.
+3. ¡Enhorabuena! Has cerrado el círculo: control desde la nube (Fase 2) y control desde el hardware (Fase 3), ambos sincronizados en tiempo real.
 ---
 
 ## 8. Fase 4: El Motor de Reglas (Inteligencia Local)
@@ -488,10 +492,91 @@ Debemos actualizar la tarea `taskReader`. Localiza tu función actual y **reempl
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
 ```
-
 ### 8.3 Comprobación Visual
 1. **Prueba del Delta:** Mueve el potenciómetro de Wokwi rápidamente. Verás que el ESP32 publica mensajes MQTT muy seguidos (cada 2 segundos) porque detecta el "salto" de PPM superior al delta configurado.
 2. **Prueba del Umbral:** Pon el ESP32 en **Modo Automático** (vía Dashboard o pulsación larga). Sube el potenciómetro por encima del umbral (1000 ppm por defecto). El relé saltará solo.
 3. ¡Felicidades! Tienes un sistema de control de lazo cerrado totalmente funcional y sincronizado con la nube.
+---
+
+## 9. Fase 5: Sincronización de Arranque (Pull-on-Boot)
+
+### 9.1 Contexto y Objetivos
+¿Qué pasa si se va la luz y el ESP32 se reinicia? Por defecto, las variables volverían a sus valores iniciales (Modo Manual, Relé OFF, Umbral 1000). Sin embargo, es posible que en la nube hubiéramos configurado un umbral distinto o que el ventilador estuviera encendido.
+
+**El Objetivo:** Al encenderse, antes de empezar a medir, el ESP32 debe hacer una consulta "de cortesía" a la API REST de Eclipse Ditto para descargar su última configuración conocida.
+
+### 9.2 El Código (Solución a implementar)
+Localiza la función `pull_on_boot()` que tenías vacía y **reemplázala por esta versión completa**. Fíjate que utiliza la librería `HTTPClient` para realizar una petición segura (HTTPS) al servidor:
+
+```cpp
+void pull_on_boot() {
+  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Sincronizando con el Gemelo)...");
+  
+  WiFiClientSecure client;
+  client.setInsecure(); // Saltamos la validación de certificado para entorno de laboratorios
+  
+  HTTPClient http;
+  String url = "https://ditto.iot-uma.es/api/2/things/" + NAMESPACE + ":" + THING_NAME + "/features";
+  
+  http.begin(client, url);
+  http.setAuthorization(mqtt_user.c_str(), mqtt_pass.c_str());
+  
+  int httpCode = http.GET();
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    StaticJsonDocument<2048> doc;
+    deserializeJson(doc, payload);
+    
+    bool hayCambios = false;
+
+    // Función auxiliar para extraer el valor (priorizando el estado 'deseado' de la nube)
+    auto extrae = [&](const char* feature, int current) -> int {
+      if (doc[feature]["desiredProperties"].containsKey("value")) 
+        return doc[feature]["desiredProperties"]["value"].as<int>();
+      if (doc[feature]["properties"].containsKey("value"))
+        return doc[feature]["properties"]["value"].as<int>();
+      return current;
+    };
+
+    // Actualizamos variables RAM
+    auto_mode = extrae("auto_mode", auto_mode);
+    threshold_vent = extrae("threshold_vent", threshold_vent);
+    publish_delta = extrae("publish_delta", publish_delta);
+    
+    // Si estamos en manual, recuperamos también el estado del relé
+    if (auto_mode == 0) {
+      vent_relay = extrae("vent_relay", vent_relay);
+      digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+      digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+    }
+
+    Serial.println(DEBUG_STRING + "Sincronización completada con éxito.");
+    // Forzamos publicación inmediata para que Ditto sepa que ya estamos alineados
+    camposPublicacion = PUB_ALL;
+    xSemaphoreGive(semPublish);
+  } else {
+    Serial.println(DEBUG_STRING + "Error en Pull-on-Boot. Código HTTP: " + String(httpCode));
+  }
+  http.end();
+}
+```
+
+### 9.3 Comprobación Visual
+1. Cambia el umbral a **2000** desde el Dashboard de Node-RED.
+2. Pulsa el botón de **Reset** del ESP32 en Wokwi.
+3. Observa la consola serie: verás cómo tras conectar al WiFi, el dispositivo descarga los datos y verás el mensaje `Sincronización completada`. Si imprimes el valor del umbral, verás que ya vale 2000 sin que hayas tenido que tocar nada.
+
+---
+
+### ¡FIN DEL PROYECTO!
+Has construido un sistema IoT robusto, basado en un sistema operativo en tiempo real (FreeRTOS) y con una sincronización bidireccional perfecta con su Gemelo Digital. 
+
+**Resumen de hitos alcanzados:**
+- [x] Multitarea FreeRTOS.
+- [x] Comunicación MQTT asíncrona por eventos.
+- [x] Gestión de telemetría inteligente (Deltas).
+- [x] Control remoto vía Desired Properties.
+- [x] Sincronización de arranque vía API REST.
+- [x] Interfaz de usuario física (NeoPixel y Botón).
 
 

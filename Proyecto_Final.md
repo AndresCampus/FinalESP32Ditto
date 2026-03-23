@@ -20,12 +20,17 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
 ## 3. Material Necesario y Arquitectura Base
 * **Hardware:** Placa de desarrollo ESP32, Sensor DHT22, Potenciómetro (simulador de sensor de calidad de aire/CO2), Módulo Relé, Anillo LED NeoPixel y un pulsador físico.
 * **Software Local:** Arduino IDE (optimizado con librerías FreeRTOS, `ArduinoJson`, `PubSubClient`, y `Button2`).
-* **Cloud/Servicios:**
-  * Broker MQTT (Mosquitto).
-  * Gestor de Gemelos Digitales (Eclipse Ditto).
-  * Base de Datos de Series Temporales (InfluxDB v2).
-  * Orquestador de Flujos y Dashboard (Node-RED + Dashboard 2.0).
-  * Plataforma de Monitorización (Grafana).
+### 3.2. Servicios Disponibles (Cloud)
+Todos los servicios del ecosistema están accesibles desde el exterior de forma segura a través del puerto estándar HTTPS (443), por lo que no es necesario especificar ningún puerto en la URL. Para acceder a ellos, debes utilizar las credenciales de conexión que se indican en la tarea correspondiente del Campus Virtual.
+
+| Servicio | URL de Acceso (Hostname) | Descripción |
+| :--- | :--- | :--- |
+| **Node-RED (Editor)** | `micro#.iot-uma.es` | Tu instancia individual para el diseño de flujos en Node-RED. *(Reemplaza el # por tu número asignado)*. |
+| **Node-RED (Dashboard)** | `micro#.iot-uma.es/dashboard` | Panel de control e interfaz de usuario de tu instancia de Node-RED. |
+| **Bróker MQTT** | `mqtt.iot-uma.es` | El servidor central para el envío y recepción de mensajes de los dispositivos. |
+| **Eclipse Ditto** | `ditto.iot-uma.es` <br> `10.10.10.201:8080` | Punto de acceso a la API REST para interactuar con los Gemelos Digitales. Desde la instancia Node-RED usar la IP local. |
+| **InfluxDB** | `influxdb.iot-uma.es` | Interfaz web de la base de datos temporal para explorar datos y configurar tareas. |
+| **Grafana** | `grafana.iot-uma.es` | Plataforma analítica para consultar datos y crear los cuadros de mando visuales. |
 
 ### 3.1. Simulación del Entorno Físico (Wokwi)
 El montaje hardware se ejecutará en **Wokwi** (usando la placa **[ESP32-C3-DevKitM-1](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32c3/hw-reference/esp32c3/user-guide-devkitm-1.html#esp32-c3-devkitm-1)**). 

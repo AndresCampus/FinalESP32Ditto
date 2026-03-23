@@ -67,8 +67,6 @@ El proyecto se dividirá en las siguientes fases incrementales (que iremos detal
 3. **Fase 3:** Sistema guiado por eventos (Manejo del pulsador con librerías y semáforos).
 4. **Fase 4:** Diseño del Panel de Mando reactivo a través de Node-RED.
 
----
-
 ## 4.1. Punto de Partida: La Plantilla Inicial
 Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el fichero **`ESP32_Plantilla_Inicial.ino`**.
 

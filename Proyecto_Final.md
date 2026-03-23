@@ -11,7 +11,6 @@ Partiendo de un microcontrolador ESP32 equipado con sensores ambientales y actua
 Al finalizar con éxito este proyecto, el estudiante será capaz de:
 * **Integración Hardware:** Adquirir y procesar datos físicos (Temperatura, Humedad, CO2) usando DHT22 y conversores ADC, controlando hardware reactivo (NeoPixel, Relés).
 * **Concurrencia con FreeRTOS:** Abandonar el paradigma *Super-Loop* (`loop()` de Arduino) para diseñar un sistema robusto multitarea con colas y semáforos, separando las comunicaciones de red del procesamiento de los sensores físicos.
-* **Concurrencia con FreeRTOS:** Abandonar el paradigma *Super-Loop* (`loop()` de Arduino) para diseñar un sistema robusto multitarea con colas y semáforos, separando las comunicaciones de red del procesamiento de los sensores físicos.
 * **Protocolos IoT y Gemelos Digitales:** Comprender y aplicar el *Ditto Protocol* sobre conexiones usando el protocoloMQTT para mantener actualizado el estado del Gemelo desde el dispositivo físico. Mantener sicronizado en el dispositivo el estado deseado (`desiredProperties`) frente al estado real (`properties`) reflejado en el Gemelo. Publicar en MQTT las actualizaciones del gemelo para poder encaminarlas hacia InfluxDB, Grafana y Node-RED.
 * **Diseño e Interfaces (HMI):** Desarrollar un "Centro de Comando" (Dashboard) web reactivo para la monitorización de telemetría y el telecontrol (envío de comandos, actuación de relés, cambio de configuraciones en caliente).
 * **API REST Ditto:** Usar la API REST de Ditto para interactuar con el Gemelo Digital y obtener información del estado del Gemelo Digital desde el dispositivo o el dashboard (por ejemplo al iniciar, *pull-on-boot*). También para mandarle mensajes al dispositivo físico a través de Ditto.
@@ -30,7 +29,7 @@ Al finalizar con éxito este proyecto, el estudiante será capaz de:
 
 ### 3.1. Simulación del Entorno Físico (Wokwi)
 ![image](https://hackmd.io/_uploads/BkZQG305bl.png)
-El montaje hardware se ejecutará en **Wokwi** (usando la placa **ESP32-C3-MINI-1**, la cual requiere elegir el ecosistema `ESP32-C3` en sus dependencias). 
+El montaje hardware se ejecutará en **Wokwi** (usando la placa **[ESP32-C3-DevKitM-1](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32c3/hw-reference/esp32c3/user-guide-devkitm-1.html#esp32-c3-devkitm-1)**, la cual requiere elegir el ecosistema `ESP32-C3` en sus dependencias). 
 El cableado electrónico de la placa final usa el siguiente mapa de pines:
 | Componente | Pin (GPIO) ESP32-C3 | Función en el Gemelo |
 | :--- | :---: | :--- |

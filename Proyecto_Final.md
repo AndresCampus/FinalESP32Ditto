@@ -71,7 +71,7 @@ Antes de empezar a programar, es vital conocer claramente qué estamos a punto d
 5. **UI Física Sensorial:** El usuario *in-situ* siempre estará informado del estado actual gracias a un anillo LED NeoPixel multicolor (que traduce el aire en colores) y un LED clásico que se enciende en paralelo al Relé de ventilación.
 6. **Manejo Manual (HMI Integrado):** Usando un interruptor de control de placa (Botón), el usuario podrá hacer una **Pulsación Larga** para deshabilitar el Modo Automático y tomar control manual del sistema, así como usar **Pulsaciones Cortas** para forzar encendidos y apagados del ventilador a conveniencia, cruzando inmediatamente esa información a la nube.
 7. **Control Remoto vía Gemelo:** Mediante el sistema de *Desired Properties* de Ditto, el administrador de la red será capaz no solo de preconfigurar los parámetros de sensibilidad del dispositivo (`publish_delta` y `threshold_vent`) desde la nube, sino que podrá actuar remotamente sobre el ventilador manipulando sus propiedades.
-8. **Comandos RPC (Avanzado):** El ESP32 será capaz de subscribirse a *Messages* nativos de Eclipse Ditto, habilitando el envío directo del comando `"refresh"` (que se implementará en una fase avanzada posterior) para obligar a la placa a realizar un volcado absoluto de datos bajo demanda.
+8. **Comandos RPC:** El ESP32 será capaz de subscribirse a *Messages* nativos de Eclipse Ditto, habilitando el envío directo del comando `"refresh"` para obligar a la placa a realizar un volcado absoluto de datos bajo demanda, fuera de su ciclo de 30 segundos. El dispositivo será capaz no solo de ejecutar la orden, sino de devolver una confirmación (Ack) al Gemelo Digital para cerrar la transacción.
 
 Para lograr todo ese hito IoT, el desarrollo del proyecto se estructurará en las siguientes **fases incrementales** (que iremos resolviendo paso a paso en los próximos apartados):
 
@@ -569,15 +569,109 @@ void pull_on_boot() {
 
 ---
 
+---
+
+## 10. Fase 6: Comandos RPC (Mensaje Refresh)
+
+### 10.1 Contexto y Objetivos
+Hasta ahora hemos visto cómo sincronizar el estado del dispositivo mediante propiedades (`Properties` y `Desired Properties`). Sin embargo, a veces necesitamos enviar **órdenes directas** (comandos) que no son un estado, sino una acción puntual. En el protocolo de Eclipse Ditto, esto se gestiona mediante **Messages**.
+
+**El Objetivo:** Implementar el comando `/refresh`. Cuando el administrador pulse un botón especial en el Dashboard, el ESP32 recibirá un mensaje RPC. Su obligación será:
+1. Interrumpir su espera y realizar una **publicación total inmediata** de todos sus sensores (`PUB_ALL`).
+2. Devolver un mensaje de **confirmación (Response)** a la nube para que Ditto sepa que el ESP32 ha recibido y ejecutado la orden.
+
+### 10.2 El Código (Solución a implementar)
+Debemos actualizar de nuevo la función `callback`. Ahora deberá distinguir si el mensaje llega por el topic de propiedades o por el de comandos. Reemplaza tu función `callback` por esta versión final:
+
+```cpp
+void callback(char* topic, byte* payload, unsigned int length) {
+  String mensaje = "";
+  for(int i = 0; i < length; i++) mensaje += (char)payload[i];
+  
+  Serial.println(DEBUG_STRING + "======= MENSAJE RECIBIDO =======");
+  Serial.println(DEBUG_STRING + "Payload: " + mensaje);
+
+  // --- 1. GESTIÓN DE COMANDOS DIRECTOS (RPC / MESSAGES) ---
+  if(String(topic) == topic_COMANDOS) {
+    StaticJsonDocument<512> doc;
+    deserializeJson(doc, mensaje);
+    String path = doc["path"].as<String>();
+    
+    if (path.endsWith("/refresh")) {
+      Serial.println(DEBUG_STRING + "¡Orden REFRESH! Forzando telemetría total...");
+      camposPublicacion = PUB_ALL; 
+      xSemaphoreGive(semPublish);  
+
+      // RESPUESTA DE CONFIRMACIÓN (Ditto Protocol Uplink)
+      StaticJsonDocument<512> resp;
+      resp["topic"] = doc["topic"]; 
+      resp["path"] = doc["path"];   
+      resp["status"] = 200;         
+      
+      JsonObject headers = resp.createNestedObject("headers");
+      headers["correlation-id"] = doc["headers"]["correlation-id"];
+      headers["content-type"] = "application/json";
+      
+      JsonObject value = resp.createNestedObject("value");
+      value["status"] = 200;
+      value["message"] = "Telemetría forzada con éxito.";
+      
+      String respuestaStr;
+      serializeJson(resp, respuestaStr);
+      mqtt_client.publish(topic_RESPUESTAS.c_str(), respuestaStr.c_str());
+    }
+  }
+  
+  // --- 2. GESTIÓN DE PROPIEDADES DESEADAS (DESIRED) ---
+  else if (String(topic) == topic_DESIRED) {
+    StaticJsonDocument<512> doc;
+    deserializeJson(doc, mensaje);
+    bool hayCambios = false;
+
+    if (doc.containsKey("auto_mode")) {
+      auto_mode = doc["auto_mode"]["value"].as<int>();
+      camposPublicacion |= PUB_AUTO_MODE;
+      hayCambios = true;
+    }
+    if (doc.containsKey("threshold_vent")) {
+      threshold_vent = doc["threshold_vent"]["value"].as<int>();
+      camposPublicacion |= PUB_THRESHOLD;
+      hayCambios = true;
+    }
+    if (doc.containsKey("vent_relay")) {
+      int nuevo_vr = doc["vent_relay"]["value"].as<int>();
+      if (auto_mode == 0) { 
+        vent_relay = nuevo_vr;
+        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+        camposPublicacion |= PUB_RELAY;
+        hayCambios = true;
+      }
+    }
+    if (hayCambios) xSemaphoreGive(semPublish);
+  }
+}
+```
+
+### 10.3 Comprobación Visual
+1. En tu Dashboard de Node-RED, localiza el botón de **"Refresh Telemetry"**.
+2. Al pulsarle, observa la consola serie del ESP32. Verás el mensaje `¡Orden REFRESH!`.
+3. Inmediatamente después, verás que el ESP32 lanza un `[MQTT UPLINK]` con todos los datos, sin esperar a que pasen los 30 segundos.
+4. En el log de Node-RED (nodo debug) verás llegar la respuesta con `status: 200` y el mensaje de éxito.
+
+---
+
 ### ¡FIN DEL PROYECTO!
 Has construido un sistema IoT robusto, basado en un sistema operativo en tiempo real (FreeRTOS) y con una sincronización bidireccional perfecta con su Gemelo Digital. 
 
 **Resumen de hitos alcanzados:**
-- [x] Multitarea FreeRTOS.
-- [x] Comunicación MQTT asíncrona por eventos.
-- [x] Gestión de telemetría inteligente (Deltas).
-- [x] Control remoto vía Desired Properties.
-- [x] Sincronización de arranque vía API REST.
-- [x] Interfaz de usuario física (NeoPixel y Botón).
+- [x] Multitarea FreeRTOS (Scheduler y Prioridades).
+- [x] Comunicación MQTT asíncrona por eventos y semáforos.
+- [x] Gestión de telemetría inteligente (Criterios de Delta y Tiempo).
+- [x] Control remoto vía Commandos RPC (Messages) y Propiedades (Desired).
+- [x] Sincronización de arranque vía API REST (Pull-on-Boot).
+- [x] Interfaz de usuario física avanzada (NeoPixel y Button2).
+
+
 
 

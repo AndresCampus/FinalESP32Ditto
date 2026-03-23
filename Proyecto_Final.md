@@ -70,7 +70,7 @@ El proyecto se dividirá en las siguientes fases incrementales (que iremos detal
 ## 4.1. Punto de Partida: La Plantilla Inicial
 Para focalizar el aprendizaje en la arquitectura de red y el modelo de concurrencia avanzado, se proporciona a los alumnos el proyecto Wokwi con el firmware inicial 👉 **[Proyecto inicial - Wokwi](https://wokwi.com/projects/459309993466875905)**
 
-Este fichero ya viene configurado con el paradigma de **FreeRTOS** (eliminando el uso de la función secuencial `loop()`) e incluye dos tareas concurrentes pre-programadas:
+Este proyecto ya viene programado con el modelo de programación concurrente de **FreeRTOS** (eliminando el uso de la función secuencial `loop()`) e incluye dos tareas concurrentes programadas:
 
 1. **`taskMQTTService` (Prioridad Alta):**
    - Se encarga de levantar y mantener viva la conexión **WiFi** y establecer el circuito **MQTT** contra el *broker*.
@@ -83,3 +83,90 @@ Este fichero ya viene configurado con el paradigma de **FreeRTOS** (eliminando e
    - Vuelca en la **Consola Serie** el valor exacto de los sensores para que puedas observar gráficamente en Wokwi que el ESP32 está vivo e interactuando con el hardware.
 
 Con esta base 100% funcional aseguramos la capa física de adquisición de datos y la capa de transporte. **A partir de aquí, el documento irá describiendo los retos (Fases) que tendrás que ir programando tú mismo paso a paso.**
+
+---
+
+## 5. Fase 1: Añadiendo la Tarea Publicadora (Event-Driven)
+
+### 5.1 Contexto y Objetivos
+La *Plantilla Inicial* que estás utilizando tiene un problema a nivel IoT: es aislada. Es capaz de leer el sensor de temperatura y activar las luces NeoPixel, pero toda esa información se queda dentro del propio ESP32, sin llegar jamás a la nube.
+
+Para enviar la información a través de la conexión WiFi (que ya se está estableciendo en la primera tarea `taskMQTTService`) necesitamos publicar mensajes en el *broker* MQTT. Sin embargo, no sería eficiente poner a la tarea `taskReader` a enviar indiscriminadamente mensajes a Internet cada vez que lee un dato de un periférico, porque la latencia de la red colapsaría y bloquearía la rápida ejecución de los botones o de las propias luces locales.
+
+**El Objetivo:** Crear una tercera tarea independiente (`taskPublisher`) que esté en "hibernación profunda" (consumiendo un 0% de CPU). La tarea lectora la despertará (usando un *Semáforo FreeRTOS*) únicamente cuando hayan transcurrido 30 segundos de silencio de red y sea obligatorio publicar la telemetría, ahorrando ancho de banda.
+
+### 5.2 El Código (Solución a implementar)
+Copia esta función íntegra. Es la nueva Tarea que empaquetará las variables globales de los sensores en formato JSON y las publicará a Ditto por MQTT:
+
+```cpp
+//-----------------------------------------------------
+// TAREA 3: Publicador MQTT (Event-Driven)
+//-----------------------------------------------------
+void taskPublisher(void *pvParameters) {
+  info_tarea_actual();
+  
+  while(true) {
+    // Esta tarea duerme infinitamente (0% CPU) hasta que alguien lance xSemaphoreGive(semPublish)
+    xSemaphoreTake(semPublish, portMAX_DELAY);
+    
+    // Copiamos la máscara de bits y la purgamos para la próxima vez
+    uint8_t currentBits = camposPublicacion;
+    camposPublicacion = 0; 
+    
+    StaticJsonDocument<256> telemetria;
+    
+    // Empaqueta SOLO lo necesario usando operaciones binarias AND a nivel de bit
+    if (currentBits & PUB_TEMP)      telemetria["temperature"]    = global_temp;
+    if (currentBits & PUB_HUM)       telemetria["humidity"]       = global_hum;
+    if (currentBits & PUB_AIR)       telemetria["air_quality"]    = global_ppm;
+    if (currentBits & PUB_RELAY)     telemetria["vent_relay"]     = vent_relay;
+    if (currentBits & PUB_AUTO_MODE) telemetria["auto_mode"]      = auto_mode;
+    if (currentBits & PUB_THRESHOLD) telemetria["threshold_vent"] = threshold_vent;
+    if (currentBits & PUB_PUB_DELTA) telemetria["publish_delta"]  = publish_delta;
+    
+    // Cancelamos un eventual envío vacío
+    if (telemetria.size() == 0) continue;
+    
+    String jsonStr;
+    serializeJson(telemetria, jsonStr);
+
+    Serial.println(DEBUG_STRING + ">>> [MQTT UPLINK] : " + jsonStr);
+    mqtt_client.publish(topic_TELEMETRIA.c_str(), jsonStr.c_str());
+  }
+}
+```
+
+### 5.3 Instrucciones de Inserción
+Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres modificaciones** en tu proyecto de Wokwi:
+
+1. **Pegar la Tarea:** Copia el bloque superior y pégalo justo antes del comentario `//   SETUP Y LOOP PRINCIPAL`.
+2. **Despertar al publicador cada 30 segundos:** Localiza en el cuerpo de la función `taskReader` la zona final inferior del bucle `while(true)`. Reemplaza las últimas líneas (donde imprime al log y hace el retardo) por esta nueva lógica temporal basada en memoria `millis()` y Semáforos:
+   ```cpp
+    // 3. Evaluar el Motor de Reglas temporales de publicación
+    bool time_elapsed = (millis() - last_publish_time >= PERIODO_PUBLICACION);
+    
+    // Si han pasado 30 segundos, enviamos todo el paquete ambiental
+    if (time_elapsed) {
+      camposPublicacion |= (PUB_TEMP | PUB_HUM | PUB_AIR); // Activamos los flags a '1'
+      last_publish_time = millis(); // Reseteamos el reloj
+      
+      Serial.println(DEBUG_STRING + "Periodo (30s) cumplido. Despertando a Publicador...");
+      xSemaphoreGive(semPublish); // Pasamos el Semáforo a Tarea 3
+    }
+ 
+    // A dormir 2 segundos cediendo la CPU de vuelta al OS
+    vTaskDelay(pdMS_TO_TICKS(2000));
+  } // <--- Fin del while(true) de taskReader
+   ```
+3. **Instanciar la Tarea en el Sistema Operativo:** Ve a la parte final del archivo, concretamente a la función core de configuración `setup()`. Localiza el lugar donde se inicializa la `taskReader` (`xTaskCreate(...)`) e inyecta debajo la orden para que FreeRTOS reserve memoria tu nueva tercera Tarea bajo una prioridad mínima (1):
+   ```cpp
+   // 3. Tarea de Publicación (Prioridad Baja: 1) Guiada por eventos
+   xTaskCreate(taskPublisher, "Publisher", 4096, NULL, 1, NULL);
+   ```
+
+### 5.4 Comprobación Visual
+1. Dale al botón **Play** del simulador Wokwi.
+2. Abre la pestaña inferior de la **Consola Serie**.
+3. Verás que cada 2 segundos se escanean localmente en amarillo la temperatura y las ppm del potenciómetro. 
+4. **Alcanzados los primeros 30 segundos de reloj**,  observarás de pronto algo distinto: el hilo de lectura imprime `Periodo (30s) cumplido...`, lo cual desencadena inmediatamente la ejecución de nuestra nueva y durmiente tarea, lanzando el log `>>> [MQTT UPLINK] : {"temperature":24,"humidity":40,"air_quality":400}`.
+5. ¡Felicidades! Tú mismo acabas de transformar un Arduino monohilo en una placa Multitarea de clase industrial operando por eventos y semáforos.

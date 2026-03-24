@@ -121,6 +121,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
       camposPublicacion |= PUB_THRESHOLD;
       hayCambios = true;
     }
+    if (doc.containsKey("publish_delta")) {
+      publish_delta = doc["publish_delta"]["value"].as<int>();
+      camposPublicacion |= PUB_PUB_DELTA;
+      hayCambios = true;
+    }
 
     if (doc.containsKey("vent_relay")) {
       int nuevo_vr = doc["vent_relay"]["value"].as<int>();

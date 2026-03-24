@@ -292,7 +292,7 @@ Hasta ahora, la comunicación ha sido unidireccional: del ESP32 a la nube. Sin e
 
 En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la nube al dispositivo). Esto nos permitirá **Sincronizar Estados (Desired Properties)**: Cambiar parámetros de funcionamiento (como el umbral de ventilación o el modo de operación) desde el Panel de Control.
 
-**El Objetivo:** Actualizar la función `callback` (el receptor de correos del ESP32) para que sepa parsear el JSON de tipo *desired* entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
+**El Objetivo:** Actualizar la función `callback` (el receptor de mensajes MQTT en el ESP32) para que sepa parsear el JSON de tipo *desired* entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
 
 ### 6.2 El Código (Solución a implementar)
 Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas:
@@ -324,6 +324,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (doc.containsKey("threshold_vent")) {
       threshold_vent = doc["threshold_vent"]["value"].as<int>();
       camposPublicacion |= PUB_THRESHOLD;
+      hayCambios = true;
+    }
+
+    // ¿El usuario ha cambiado el delta de publicación (ppm)?
+    if (doc.containsKey("publish_delta")) {
+      publish_delta = doc["publish_delta"]["value"].as<int>();
+      camposPublicacion |= PUB_PUB_DELTA;
       hayCambios = true;
     }
 
@@ -664,6 +671,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
       camposPublicacion |= PUB_THRESHOLD;
       hayCambios = true;
     }
+
+    if (doc.containsKey("publish_delta")) {
+      publish_delta = doc["publish_delta"]["value"].as<int>();
+      camposPublicacion |= PUB_PUB_DELTA;
+      hayCambios = true;
+    }
     if (doc.containsKey("vent_relay")) {
       int nuevo_vr = doc["vent_relay"]["value"].as<int>();
       if (auto_mode == 0) { 
@@ -697,7 +710,7 @@ Copia e importa este JSON en tu Node-RED:
 
 ---
 
-## 11. Fase Final: Integración de Grafana en el Dashboard
+## 11. Fase Final: Integración de Grafana en el Dashboard NodeRED
 Como broche de oro a nuestro sistema IoT, vamos a integrar una visualización de datos históricos utilizando **Grafana**. En lugar de saltar entre pestañas, incrustaremos el panel directamente en nuestra App de Node-RED mediante un **Iframe**.
 ![image](https://hackmd.io/_uploads/H1VTwS1jZg.png)
 

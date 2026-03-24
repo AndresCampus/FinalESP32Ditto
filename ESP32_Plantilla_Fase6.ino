@@ -200,35 +200,91 @@ void conecta_mqtt() {
 }
 
 void pull_on_boot() {
-  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Sincronizando con el Gemelo)...");
+  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Descargando configuración del gemelo)...");
+  
   WiFiClientSecure client;
-  client.setInsecure(); 
+  client.setInsecure(); // No validar el certificado para agilizar
+  
   HTTPClient http;
+  // Descargamos las features enteras del Thing
   String url = "https://ditto.iot-uma.es/api/2/things/" + NAMESPACE + ":" + THING_NAME + "/features";
+  
   http.begin(client, url);
   http.setAuthorization(mqtt_user.c_str(), mqtt_pass.c_str());
+  
   int httpCode = http.GET();
+  
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
+    
     StaticJsonDocument<2048> doc;
-    deserializeJson(doc, payload);
-    auto extrae = [&](const char* feature, int current) -> int {
-      if (doc[feature]["desiredProperties"].containsKey("value")) return doc[feature]["desiredProperties"]["value"].as<int>();
-      if (doc[feature]["properties"].containsKey("value")) return doc[feature]["properties"]["value"].as<int>();
-      return current;
-    };
-    auto_mode = extrae("auto_mode", auto_mode);
-    threshold_vent = extrae("threshold_vent", threshold_vent);
-    publish_delta = extrae("publish_delta", publish_delta);
-    if (auto_mode == 0) {
-      vent_relay = extrae("vent_relay", vent_relay);
-      digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
-      digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (!error) {
+      bool hayCambios = false;
+      Serial.println(DEBUG_STRING + "¡Features descargadas con éxito! Chequeando parámetros locales...");
+      
+      // Pequeña lambda para simplificar la extracción y priorizar 'desired' frente a 'reported'
+      auto extraeValor = [&](const char* feature, int currentVal) -> int {
+        if (doc[feature]["desiredProperties"].containsKey("value")) {
+          return doc[feature]["desiredProperties"]["value"].as<int>();
+        } else if (doc[feature]["properties"].containsKey("value")) {
+          return doc[feature]["properties"]["value"].as<int>();
+        }
+        return currentVal;
+      };
+
+      // 1. Extracción pura del JSON de Ditto
+      int pull_auto_mode = extraeValor("auto_mode", auto_mode);
+      int pull_vent_relay = extraeValor("vent_relay", vent_relay);
+      int pull_threshold = extraeValor("threshold_vent", threshold_vent);
+      int pull_delta = extraeValor("publish_delta", publish_delta);
+
+      // 2. Transfusión segura de estados a RAM Global
+      if (pull_auto_mode != auto_mode) {
+        auto_mode = pull_auto_mode;
+        hayCambios = true;
+        camposPublicacion |= PUB_AUTO_MODE; // Activamos bandera del modo automático
+      }
+      
+      if (pull_threshold != threshold_vent) {
+        threshold_vent = pull_threshold;
+        hayCambios = true;
+        camposPublicacion |= PUB_THRESHOLD; // Activamos bandera del umbral
+      }
+      
+      if (pull_delta != publish_delta) {
+        publish_delta = pull_delta;
+        hayCambios = true;
+        camposPublicacion |= PUB_PUB_DELTA; // Activamos bandera del delta
+      }
+
+      // En el arranque, ¿obedecemos el relé del cloud? Solo si estamos en manual.
+      // (Si caemos en auto, ya lo arreglará el sensor en el primer ciclo del taskReader)
+      if (pull_vent_relay != vent_relay && auto_mode == 0) {
+        vent_relay = pull_vent_relay;
+        // Asignamos el pin físico del arranque
+        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+        hayCambios = true;
+        camposPublicacion |= PUB_RELAY; // Activamos bandera del relé
+      }
+      
+      Serial.println(DEBUG_STRING + "Sincronización completada con éxito.");
+
+      // 3. Forzar a TaskPublisher a subir el nuevo testamento (Ack al Servidor)
+      if (hayCambios) {
+        Serial.println(DEBUG_STRING + "Discrepancias corregidas. Forzando uplink para nivelar telemetría...");
+        xSemaphoreGive(semPublish);
+      }
+      
+    } else {
+      Serial.println(DEBUG_STRING + "Error desencriptando el JSON del Pull-On-Boot: " + String(error.c_str()));
     }
-    Serial.println(DEBUG_STRING + "Sincronización completada.");
-    camposPublicacion = PUB_ALL;
-    xSemaphoreGive(semPublish);
+  } else {
+    Serial.println(DEBUG_STRING + "Fallo o timeout en HTTP GET durante Pull-on-boot (" + String(httpCode) + ")");
   }
+  
   http.end();
 }
 

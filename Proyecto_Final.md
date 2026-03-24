@@ -295,7 +295,7 @@ En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la n
 **El Objetivo:** Actualizar la función `callback` (el receptor de mensajes MQTT en el ESP32) para que sepa parsear el JSON de tipo *desired* entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
 
 ### 6.2 El Código (Solución a implementar)
-Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas y actualiza las variables globales de control, además anota los cambios en el mapa de bits de publicación para llamar al publicador cuando sea necesario con las actualizaciones necesarias:
+Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas y actualiza las variables globales de control, además anota los cambios en el mapa de bits de publicación para llamar al publicador cuando sea necesario con las actualizaciones necesarias. Se controlan los cambios en el modo de operación, el umbral de ventilación, el delta de publicación y el estado del relé. Es importante destacar que el relé solo se puede controlar en modo manual.
 
 ```cpp
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -362,7 +362,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 ---
 
 ## 6.4. Control desde Node-RED (Capa de Aplicación)
-Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos añadir una lógica que capture tus interacciones (mover un slider, pulsar un botón) y las envíe a la API REST de Eclipse Ditto.
+Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos añadir una lógica que capture tus interacciones (mover un slider, pulsar un botón) y las envíe a la API REST de Eclipse Ditto. Los 5 nodos que producen cambios en el gemelo digital envían en payload el valor que se desea establecer en la propiedad deseada y en topic el nombre de la propiedad deseada. Por ejemplo, si movemos el slider de umbral de ventilación, se enviará un mensaje en payload con el valor del umbral y en topic "threshold_vent". 
 ![image](https://hackmd.io/_uploads/SkeBLrkiWx.png)
 
 ### Instrucciones de Integración:
@@ -383,14 +383,14 @@ Para que el Dashboard no sea solo un visor, sino un mando a distancia, debemos a
 ## 7. Fase 3: Interacción Física (El Pulsador)
 
 ### 7.1 Contexto y Objetivos
-Un dispositivo IoT no debe depender exclusivamente de la nube para ser funcional. El usuario que está frente a la máquina debe poder actuar sobre ella de forma inmediata. Sin embargo, en un sistema de **Gemelo Digital**, cualquier cambio físico (pulsar un botón) debe verse reflejado instantáneamente en el panel de control remoto.
+Un dispositivo IoT no debe depender exclusivamente de la nube para ser funcional. El usuario que está frente a la máquina física también puede optar por actuar sobre ella de forma inmediata. Sin embargo, en un sistema de **Gemelo Digital**, cualquier cambio físico (pulsar un botón) debe verse reflejado instantáneamente en el panel de control remoto.
 
 **El Objetivo:** Implementar un sistema de control híbrido. El botón físico permitirá:
 1. **Pulsación Corta:** Encender/Apagar el ventilador (solo si el modo es Manual).
-2. **Pulsación Larga (2 segundos):** Cambiar entre Modo Automático (el sensor manda) y Modo Manual (la persona manda).
+2. **Pulsación Larga (2 segundos):** Alternar entre Modo Automático (el sensor manda) y Modo Manual (la persona manda).
 
 ### 7.2 El Código (Solución a implementar)
-Copia este bloque que contiene los "manejadores" (callbacks) del botón y su tarea dedicada de escaneo:
+Copia este bloque que contiene los "manejadores" (callbacks) del botón y su tarea dedicada de escaneo. Usaremos la librería Button2 para facilitar la implementación. Esta librería se encarga de detectar los diferentes tipos de pulsación (corta, larga, doble, etc.) y nos permite definir qué acción realizar en cada caso. En la tarea que vigila el botón se inicializa la librería y se definen los callbacks que se ejecutarán en cada caso y se inicia el bucle de escaneo que se repite indefinidamente.
 
 ```cpp
 // --- Callbacks de la librería Button2 ---
@@ -450,7 +450,7 @@ void taskBotones(void *pvParameters) {
 
 ### 7.4 Comprobación Visual
 1. Pulsa el botón del simulador Wokwi **brevemente**. Si estás en Modo Manual, verás que el relé y el LED se encienden, y en Node-RED se actualiza el estado del relé también.
-2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. Si ahora pulsas brevemente, el sistema ignorará la orden manual porque "el autómata" tiene el control.
+2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. El led parpaderá para indicar que se ha producido el cambio de modo. Si has cambiado al modo automático y ahora pulsas brevemente, el sistema ignorará la orden manual porque "el sistema" tiene el control.
 3. ¡Enhorabuena! Has cerrado el círculo: control desde la nube (Fase 2) y control desde el hardware (Fase 3), ambos sincronizados en tiempo real.
 ---
 
@@ -526,15 +526,15 @@ Debemos actualizar la tarea `taskReader`. Localiza tu función actual y **reempl
   }
 ```
 ### 8.3 Comprobación Visual
-1. **Prueba del Delta:** Mueve el potenciómetro de Wokwi rápidamente. Verás que el ESP32 publica mensajes MQTT muy seguidos (cada 2 segundos) porque detecta el "salto" de PPM superior al delta configurado.
-2. **Prueba del Umbral:** Pon el ESP32 en **Modo Automático** (vía Dashboard o pulsación larga). Sube el potenciómetro por encima del umbral (1000 ppm por defecto). El relé saltará solo.
+1. **Prueba del Delta:** Si mueves el potenciómetro de Wokwi rápidamente. Verás que el ESP32 publica mensajes MQTT muy seguidos (en menos de 2 segundos) porque detecta el "salto" de PPM superior al delta configurado. No esperará los 30 segundos de periodo de publicación establecido.
+2. **Prueba del Umbral:** Pon el ESP32 en **Modo Automático** (vía Dashboard o pulsación larga en el botón físico). Sube el potenciómetro por encima del umbral (1000 ppm por defecto). El relé saltará solo.
 3. ¡Felicidades! Tienes un sistema de control de lazo cerrado totalmente funcional y sincronizado con la nube.
 ---
 
 ## 9. Fase 5: Sincronización de Arranque (Pull-on-Boot)
 
 ### 9.1 Contexto y Objetivos
-¿Qué pasa si se va la luz y el ESP32 se reinicia? Por defecto, las variables volverían a sus valores iniciales (Modo Manual, Relé OFF, Umbral 1000). Sin embargo, es posible que en la nube hubiéramos configurado un umbral distinto o que el ventilador estuviera encendido.
+¿Qué pasa si se va la luz y el ESP32 se reinicia? Por defecto, las variables volverían a sus valores iniciales (Modo Manual, Relé OFF, Umbral 1000). Sin embargo, es posible que en la nube hubiéramos configurado un umbral distinto o que el ventilador estuviera encendido. Además no recibiríamos nos perderíamos las ordenes de cambio de estado de los desired properties mientras estemos desconectados. Al reconectar solucionamos todas las discrepancias entre el estado real del dispositivo y el estado deseado por el gemelo digital.
 
 **El Objetivo:** Al encenderse, antes de empezar a medir, el ESP32 debe hacer una consulta "de cortesía" a la API REST de Eclipse Ditto para descargar su última configuración conocida.
 
@@ -543,53 +543,89 @@ Localiza la función `pull_on_boot()` que tenías vacía y **reemplázala por es
 
 ```cpp
 void pull_on_boot() {
-  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Sincronizando con el Gemelo)...");
+  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Descargando configuración del gemelo)...");
   
   WiFiClientSecure client;
-  client.setInsecure(); // Saltamos la validación de certificado para entorno de laboratorios
+  client.setInsecure(); // No validar el certificado para agilizar
   
   HTTPClient http;
+  // Descargamos las features enteras del Thing
   String url = "https://ditto.iot-uma.es/api/2/things/" + NAMESPACE + ":" + THING_NAME + "/features";
   
   http.begin(client, url);
   http.setAuthorization(mqtt_user.c_str(), mqtt_pass.c_str());
   
   int httpCode = http.GET();
+  
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
+    
     StaticJsonDocument<2048> doc;
-    deserializeJson(doc, payload);
+    DeserializationError error = deserializeJson(doc, payload);
     
-    bool hayCambios = false;
+    if (!error) {
+      bool hayCambios = false;
+      Serial.println(DEBUG_STRING + "¡Features descargadas con éxito! Chequeando parámetros locales...");
+      
+      // Pequeña lambda para simplificar la extracción y priorizar 'desired' frente a 'reported'
+      auto extraeValor = [&](const char* feature, int currentVal) -> int {
+        if (doc[feature]["desiredProperties"].containsKey("value")) {
+          return doc[feature]["desiredProperties"]["value"].as<int>();
+        } else if (doc[feature]["properties"].containsKey("value")) {
+          return doc[feature]["properties"]["value"].as<int>();
+        }
+        return currentVal;
+      };
 
-    // Función auxiliar para extraer el valor (priorizando el estado 'deseado' de la nube)
-    auto extrae = [&](const char* feature, int current) -> int {
-      if (doc[feature]["desiredProperties"].containsKey("value")) 
-        return doc[feature]["desiredProperties"]["value"].as<int>();
-      if (doc[feature]["properties"].containsKey("value"))
-        return doc[feature]["properties"]["value"].as<int>();
-      return current;
-    };
+      // 1. Extracción pura de los valores actuales del Gemelo Digital
+      int pull_auto_mode = extraeValor("auto_mode", auto_mode);
+      int pull_vent_relay = extraeValor("vent_relay", vent_relay);
+      int pull_threshold = extraeValor("threshold_vent", threshold_vent);
+      int pull_delta = extraeValor("publish_delta", publish_delta);
 
-    // Actualizamos variables RAM
-    auto_mode = extrae("auto_mode", auto_mode);
-    threshold_vent = extrae("threshold_vent", threshold_vent);
-    publish_delta = extrae("publish_delta", publish_delta);
-    
-    // Si estamos en manual, recuperamos también el estado del relé
-    if (auto_mode == 0) {
-      vent_relay = extrae("vent_relay", vent_relay);
-      digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
-      digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+      // 2. Transfusión segura de estados a la RAM del ESP32 (Solo si hay discrepancias)
+      if (pull_auto_mode != auto_mode) {
+        auto_mode = pull_auto_mode;
+        hayCambios = true;
+        camposPublicacion |= PUB_AUTO_MODE; 
+      }
+      
+      if (pull_threshold != threshold_vent) {
+        threshold_vent = pull_threshold;
+        hayCambios = true;
+        camposPublicacion |= PUB_THRESHOLD;
+      }
+      
+      if (pull_delta != publish_delta) {
+        publish_delta = pull_delta;
+        hayCambios = true;
+        camposPublicacion |= PUB_PUB_DELTA;
+      }
+
+      // En el arranque, ¿obedecemos el relé de la nube? Solo si el modo global es MANUAL
+      if (pull_vent_relay != vent_relay && auto_mode == 0) {
+        vent_relay = pull_vent_relay;
+        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+        hayCambios = true;
+        camposPublicacion |= PUB_RELAY;
+      }
+      
+      Serial.println(DEBUG_STRING + "Sincronización completada con éxito.");
+
+      // 3. Si hubo cambios, avisamos al Publicador para que envíe el ACK (confirmación)
+      if (hayCambios) {
+        Serial.println(DEBUG_STRING + "Discrepancias corregidas. Forzando uplink para nivelar telemetría...");
+        xSemaphoreGive(semPublish);
+      }
+      
+    } else {
+      Serial.println(DEBUG_STRING + "Error parseando el JSON del Pull-On-Boot: " + String(error.c_str()));
     }
-
-    Serial.println(DEBUG_STRING + "Sincronización completada con éxito.");
-    // Forzamos publicación inmediata para que Ditto sepa que ya estamos alineados
-    camposPublicacion = PUB_ALL;
-    xSemaphoreGive(semPublish);
   } else {
-    Serial.println(DEBUG_STRING + "Error en Pull-on-Boot. Código HTTP: " + String(httpCode));
+    Serial.println(DEBUG_STRING + "Fallo en HTTP GET durante Pull-on-boot (" + String(httpCode) + ")");
   }
+  
   http.end();
 }
 ```

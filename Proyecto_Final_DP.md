@@ -81,7 +81,8 @@ Para lograr todo ese hito IoT, el desarrollo del proyecto se estructurará en la
 4. **Fase 4:** Diseño del Panel de Mando reactivo del usuario a través de Node-RED.
 
 ## 4.1. Creación del Gemelo en Eclipse Ditto
-Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, nuestra máxima prioridad es **aprovisionar el modelo de datos virtual** en la nube. Necesitamos indicarle a la plataforma Eclipse Ditto qué atributos físicos y funcionales (Features) va a tener nuestra máquina y qué política de acceso lo gobernará.
+Antes de abrir el simulador Wokwi y escribir una sola línea de código en C++, nuestra máxima prioridad es **aprovisionar el modelo de datos virtual** en la nube. Necesitamos indicarle a la plataforma Eclipse Ditto qué atributos físicos y funcionales (Features) va a tener nuestra máquina y qué política de acceso lo gobernará. En el nombre de las *features* es **importante seguir esta convención**: Si la *feature* posee *desiredProperties*, porque es un actuador y puede recibir peticiones de cambio de estado desde la aplicación y también puede cambiar de estado autonomámente desde la cosa física, su nombre debe terminar en "_DP", de esta forma la conexión de entrada también actualiza el valor "value" de desiredProperties cuando se actualiza su valor desde MQTT. Útil para cambiar el valor de un actuador localmente desde el dispositivo y que el valor de la propiedad reportada quede alineada con la propiedad deseada.
+
 
 Abre un terminal o usa una consola local (Git Bash, WSL, Terminal de macOS/Linux) y ejecuta el siguiente comando *cURL* para registrar estructuralmente tu gemelo digital. 
 

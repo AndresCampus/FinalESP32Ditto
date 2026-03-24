@@ -201,14 +201,14 @@ Con este cambio, cada vez que hagas un *Deploy* o recargues el flujo, el Dashboa
 ## 5. Fase 1: Añadiendo la Tarea Publicadora (Event-Driven)
 
 ### 5.1 Contexto y Objetivos
-La *Plantilla Inicial* que estás utilizando tiene un problema a nivel IoT: es aislada. Es capaz de leer el sensor de temperatura y activar las luces NeoPixel, pero toda esa información se queda dentro del propio ESP32, sin llegar jamás a la nube.
+La *Plantilla Inicial* que estás utilizando tiene una limitación importante a nivel IoT: está aislada. Es capaz de leer el sensor de temperatura y activar las luces NeoPixel, pero toda esa información se queda dentro del propio ESP32, sin llegar jamás a la nube.
 
 Para enviar la información a través de la conexión WiFi (que ya se está estableciendo en la primera tarea `taskMQTTService`) necesitamos publicar mensajes en el *broker* MQTT. Sin embargo, no sería eficiente poner a la tarea `taskReader` a enviar indiscriminadamente mensajes a Internet cada vez que lee un dato de un periférico, porque la latencia de la red colapsaría y bloquearía la rápida ejecución de los botones o de las propias luces locales.
 
-**El Objetivo:** Crear una tercera tarea independiente (`taskPublisher`) que esté en "hibernación profunda" (consumiendo un 0% de CPU). La tarea lectora la despertará (usando un *Semáforo FreeRTOS*) únicamente cuando hayan transcurrido 30 segundos de silencio de red y sea obligatorio publicar la telemetría, ahorrando ancho de banda.
+**El Objetivo:** Crear una tercera tarea independiente (`taskPublisher`) que esté "bloqueada" (consumiendo un 0% de CPU). La tarea lectora la despertará (usando un *Semáforo FreeRTOS*) únicamente cuando hayan transcurrido 30 segundos de silencio de red y sea obligatorio publicar la telemetría, ahorrando ancho de banda.
 
 ### 5.2 El Código (Solución a implementar)
-Copia esta función íntegra. Es la nueva Tarea que empaquetará las variables globales de los sensores en formato JSON y las publicará a Ditto por MQTT:
+Copia esta función íntegra. Es la nueva Tarea que empaquetará las variables globales de los sensores en formato JSON y las publicará a Ditto por MQTT. Hemos previsto un esquema de publicación selectiva en la que sólo se envían los datos que han cambiado y que están activos en el mapa de bits `camposPublicacion`:
 
 ```cpp
 //-----------------------------------------------------
@@ -279,7 +279,7 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
 ### 5.4 Comprobación Visual
 1. Dale al botón **Play** del simulador Wokwi.
 2. Abre la pestaña inferior de la **Consola Serie**.
-3. Verás que cada 2 segundos se escanean localmente en amarillo la temperatura y las ppm del potenciómetro. 
+3. Verás que cada 2 segundos se escanean localmente la temperatura, la humedad y las ppm del potenciómetro. 
 4. **Alcanzados los primeros 30 segundos de reloj**,  observarás de pronto algo distinto: el hilo de lectura imprime `Periodo (30s) cumplido...`, lo cual desencadena inmediatamente la ejecución de nuestra nueva y durmiente tarea, lanzando el log `>>> [MQTT UPLINK] : {"temperature":24,"humidity":40,"air_quality":400}`. Podrás comprobar en el panel de control de Node-RED que el dispositivo actualiza la telemetría cada 30 segundos.
 5. ¡Felicidades! Acabas de programar una placa ESP32 con sistema operativo FreeRTOS, multitarea de clase industrial operando por eventos y semáforos.
 

@@ -543,89 +543,88 @@ Localiza la función `pull_on_boot()` que tenías vacía y **reemplázala por es
 
 ```cpp
 void pull_on_boot() {
-  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Descargando configuración del gemelo)...");
+  Serial.println(DEBUG_STRING + "Iniciando Pull-on-Boot (Sincronización Avanzada)...");
   
   WiFiClientSecure client;
-  client.setInsecure(); // No validar el certificado para agilizar
+  client.setInsecure(); // Saltamos validación para agilizar en laboratorios
   
   HTTPClient http;
-  // Descargamos las features enteras del Thing
   String url = "https://ditto.iot-uma.es/api/2/things/" + NAMESPACE + ":" + THING_NAME + "/features";
   
   http.begin(client, url);
   http.setAuthorization(mqtt_user.c_str(), mqtt_pass.c_str());
   
   int httpCode = http.GET();
-  
   if (httpCode == HTTP_CODE_OK) {
     String payload = http.getString();
-    
     StaticJsonDocument<2048> doc;
     DeserializationError error = deserializeJson(doc, payload);
     
     if (!error) {
-      bool hayCambios = false;
-      Serial.println(DEBUG_STRING + "¡Features descargadas con éxito! Chequeando parámetros locales...");
+      bool hayCambiosPendientes = false;
+      Serial.println(DEBUG_STRING + "¡Features descargadas! Analizando discrepancias...");
       
-      // Pequeña lambda para simplificar la extracción y priorizar 'desired' frente a 'reported'
-      auto extraeValor = [&](const char* feature, int currentVal) -> int {
-        if (doc[feature]["desiredProperties"].containsKey("value")) {
-          return doc[feature]["desiredProperties"]["value"].as<int>();
-        } else if (doc[feature]["properties"].containsKey("value")) {
-          return doc[feature]["properties"]["value"].as<int>();
+      // Estructura para procesar cada feature de forma atómica
+      auto sincronizarFeature = [&](const char* featureName, int &variableLocal, uint8_t bitPublicacion) {
+        bool hasDesired = doc[featureName]["desiredProperties"].containsKey("value");
+        bool hasReported = doc[featureName]["properties"].containsKey("value");
+        
+        int valDesired = hasDesired ? doc[featureName]["desiredProperties"]["value"].as<int>() : -1;
+        int valReported = hasReported ? doc[featureName]["properties"]["value"].as<int>() : -1;
+
+        // 1. Alineamos la variable local con lo más nuevo del gemelo
+        if (hasDesired) {
+          variableLocal = valDesired;
+        } else if (hasReported) {
+          variableLocal = valReported;
         }
-        return currentVal;
+
+        // 2. ¿Hay una orden pendiente en el gemelo? (Desired != Reported)
+        if (hasDesired && (!hasReported || valDesired != valReported)) {
+          camposPublicacion |= bitPublicacion;
+          hayCambiosPendientes = true;
+        }
       };
 
-      // 1. Extracción pura de los valores actuales del Gemelo Digital
-      int pull_auto_mode = extraeValor("auto_mode", auto_mode);
-      int pull_vent_relay = extraeValor("vent_relay", vent_relay);
-      int pull_threshold = extraeValor("threshold_vent", threshold_vent);
-      int pull_delta = extraeValor("publish_delta", publish_delta);
+      // Sincronizamos cada parámetro ambiental y de control
+      sincronizarFeature("auto_mode", auto_mode, PUB_AUTO_MODE);
+      sincronizarFeature("threshold_vent", threshold_vent, PUB_THRESHOLD);
+      sincronizarFeature("publish_delta", publish_delta, PUB_PUB_DELTA);
 
-      // 2. Transfusión segura de estados a la RAM del ESP32 (Solo si hay discrepancias)
-      if (pull_auto_mode != auto_mode) {
-        auto_mode = pull_auto_mode;
-        hayCambios = true;
-        camposPublicacion |= PUB_AUTO_MODE; 
-      }
-      
-      if (pull_threshold != threshold_vent) {
-        threshold_vent = pull_threshold;
-        hayCambios = true;
-        camposPublicacion |= PUB_THRESHOLD;
-      }
-      
-      if (pull_delta != publish_delta) {
-        publish_delta = pull_delta;
-        hayCambios = true;
-        camposPublicacion |= PUB_PUB_DELTA;
+      // Tratamiento especial para el relé (debe obedecer al cloud si estamos en Manual)
+      bool hasDesiredRelay = doc["vent_relay"]["desiredProperties"].containsKey("value");
+      bool hasReportedRelay = doc["vent_relay"]["properties"].containsKey("value");
+      int valDesiredRelay = hasDesiredRelay ? doc["vent_relay"]["desiredProperties"]["value"].as<int>() : -1;
+      int valReportedRelay = hasReportedRelay ? doc["vent_relay"]["properties"]["value"].as<int>() : -1;
+
+      if (hasDesiredRelay) {
+        if (auto_mode == 0) vent_relay = valDesiredRelay;
+      } else if (hasReportedRelay) {
+        if (auto_mode == 0) vent_relay = valReportedRelay;
       }
 
-      // En el arranque, ¿obedecemos el relé de la nube? Solo si el modo global es MANUAL
-      if (pull_vent_relay != vent_relay && auto_mode == 0) {
-        vent_relay = pull_vent_relay;
-        digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
-        digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
-        hayCambios = true;
+      // Aplicar estado físico tras el arranque
+      digitalWrite(RELAYPIN, vent_relay ? HIGH : LOW);
+      digitalWrite(LEDPIN, vent_relay ? HIGH : LOW);
+
+      if (hasDesiredRelay && (!hasReportedRelay || valDesiredRelay != valReportedRelay)) {
         camposPublicacion |= PUB_RELAY;
+        hayCambiosPendientes = true;
       }
-      
-      Serial.println(DEBUG_STRING + "Sincronización completada con éxito.");
 
-      // 3. Si hubo cambios, avisamos al Publicador para que envíe el ACK (confirmación)
-      if (hayCambios) {
-        Serial.println(DEBUG_STRING + "Discrepancias corregidas. Forzando uplink para nivelar telemetría...");
+      if (hayCambiosPendientes) {
+        Serial.println(DEBUG_STRING + "Detectados cambios pendientes en la nube. Enviando confirmación...");
         xSemaphoreGive(semPublish);
+      } else {
+        Serial.println(DEBUG_STRING + "Sistema sincronizado. Sin cambios pendientes.");
       }
       
     } else {
-      Serial.println(DEBUG_STRING + "Error parseando el JSON del Pull-On-Boot: " + String(error.c_str()));
+      Serial.println(DEBUG_STRING + "Error parseando JSON: " + String(error.c_str()));
     }
   } else {
-    Serial.println(DEBUG_STRING + "Fallo en HTTP GET durante Pull-on-boot (" + String(httpCode) + ")");
+    Serial.println(DEBUG_STRING + "Error en Pull-on-Boot (HTTP " + String(httpCode) + ")");
   }
-  
   http.end();
 }
 ```

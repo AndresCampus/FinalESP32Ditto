@@ -295,7 +295,7 @@ En esta fase, aprenderemos a manejar el **Downlink** (mensajes que bajan de la n
 **El Objetivo:** Actualizar la función `callback` (el receptor de mensajes MQTT en el ESP32) para que sepa parsear el JSON de tipo *desired* entrante de Eclipse Ditto y actualizar nuestras variables globales de control.
 
 ### 6.2 El Código (Solución a implementar)
-Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas:
+Reemplaza la función `callback` vacía que tienes actualmente por esta versión. Fíjate cómo utiliza la librería `ArduinoJson` para extraer los valores de las propiedades deseadas y actualiza las variables globales de control, además anota los cambios en el mapa de bits de publicación para llamar al publicador cuando sea necesario con las actualizaciones necesarias:
 
 ```cpp
 void callback(char* topic, byte* payload, unsigned int length) {

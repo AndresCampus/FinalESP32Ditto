@@ -48,7 +48,7 @@ El cableado electrónico de la placa final usa el siguiente mapa de pines:
 | **LED Testigo Normal** | `GPIO 5` | Chivato de estado de operación y flasheo de acuse de recibo de tramas MQTT |
 
 ### Entorno de pruebas HW Preparado en Wokwi
-Puedes acceder a todo el entorno hardware ya emsamblado de fábrica, junto con un pequeño firmware local de prueba (sin las librerías de red todavía), haciendo clic en el siguiente enlace:
+Puedes acceder a todo el entorno hardware ya preparado con todo conectado, junto con un pequeño firmware local de prueba (sin conectividad de red todavía), haciendo clic en el siguiente enlace:
 👉 **[Proyecto Hardware Fase 0 - Wokwi](https://wokwi.com/projects/459079537457837057)**
 
 Este proyecto te permitirá entender la lógica transaccional de los pines antes de pasar a la nube. Incluye una máquina de estados local que gobierna la circuitería:
@@ -261,7 +261,7 @@ Para hacer que la nueva tarea del publicador funcione, tienes que hacer **tres m
     
     // Si han pasado 30 segundos, enviamos todo el paquete ambiental
     if (time_elapsed) {
-      camposPublicacion |= (PUB_TEMP | PUB_HUM | PUB_AIR); // Activamos los flags a '1'
+      camposPublicacion |= PUB_ALL; // (PUB_TEMP | PUB_HUM | PUB_AIR); // Activamos los flags a '1'
       last_publish_time = millis(); // Reseteamos el reloj
       
       Serial.println(DEBUG_STRING + "Periodo (30s) cumplido. Despertando a Publicador...");
@@ -397,6 +397,10 @@ Un dispositivo IoT no debe depender exclusivamente de la nube para ser funcional
 Copia este bloque que contiene los "manejadores" (callbacks) del botón y su tarea dedicada de escaneo. Usaremos la librería Button2 para facilitar la implementación. Esta librería se encarga de detectar los diferentes tipos de pulsación (corta, larga, doble, etc.) y nos permite definir qué acción realizar en cada caso. En la tarea que vigila el botón se inicializa la librería y se definen los callbacks que se ejecutarán en cada caso y se inicia el bucle de escaneo que se repite indefinidamente.
 
 ```cpp
+//-----------------------------------------------------
+// TAREA 4: Gestión Asíncrona del Botón Físico (UI)
+//-----------------------------------------------------
+
 // --- Callbacks de la librería Button2 ---
 void clickCorto(Button2& btn) {
   // Sólo conmutamos a mano si estamos en el modo Manual
@@ -426,7 +430,7 @@ void clickLargo(Button2& btn) {
   xSemaphoreGive(semPublish);         // Sincronizamos con el Gemelo Digital
 }
 
-// --- TAREA 4: Gestión del Pulsador ---
+// --- Cuerpo de la Tarea FreeRTOS T4: Gestión del Pulsador ---
 void taskBotones(void *pvParameters) {
   info_tarea_actual();
   
@@ -454,7 +458,7 @@ void taskBotones(void *pvParameters) {
 
 ### 7.4 Comprobación Visual
 1. Pulsa el botón del simulador Wokwi **brevemente**. Si estás en Modo Manual, verás que el relé y el LED se encienden, y en Node-RED se actualiza el estado del relé también.
-2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. El led parpaderá para indicar que se ha producido el cambio de modo. Si has cambiado al modo automático y ahora pulsas brevemente, el sistema ignorará la orden manual porque "el sistema" tiene el control.
+2. Mantén pulsado el botón **2 segundos**. Verás en la consola el mensaje de cambio de modo. Se podría añadir en la función `clickLargo` un parpadeo para indicar visualmente el cambio a automático o manual. Si has cambiado al modo automático y ahora pulsas brevemente, el sistema ignorará la orden manual porque "el sistema" tiene el control.
 3. ¡Enhorabuena! Has cerrado el círculo: control desde la nube (Fase 2) y control desde el hardware (Fase 3), ambos sincronizados en tiempo real.
 ---
 
@@ -505,24 +509,25 @@ Debemos actualizar la tarea `taskReader`. Localiza tu función actual y **reempl
     }
     
     // 5. MOTOR DE REGLAS 2: Criterios de Publicación por Red
-    bool time_elapsed = (millis() - last_publish_time >= PERIODO_PUBLICACION);
+    unsigned long ahora = millis();
+    bool time_elapsed = (ahora - last_publish_telemetry_time >= PERIODO_PUBLICACION);
     bool delta_exceeded = (abs(current_ppm - last_published_ppm) >= publish_delta_DP);
     
     // Si se cumple CUALQUIERA de las condiciones, disparamos el publicador
     if (time_elapsed || delta_exceeded || state_changed) {
       
       if (time_elapsed) {
-        camposPublicacion |= (PUB_TEMP | PUB_HUM | PUB_AIR); // Refresco general
+        camposPublicacion |= PUB_ALL; // Refresco general
+        last_publish_telemetry_time = ahora;
+        last_published_ppm = current_ppm;
       }
       if (delta_exceeded) {
         camposPublicacion |= PUB_AIR; // Solo notificamos el salto crítico de CO2
+        last_published_ppm = current_ppm;
       }
       if (state_changed) {
         camposPublicacion |= PUB_RELAY; // Notificamos el cambio del relé
       }
-
-      last_publish_time = millis();
-      last_published_ppm = current_ppm;
       
       Serial.println(DEBUG_STRING + "Evento detectado. Despertando publicador...");
       xSemaphoreGive(semPublish);
@@ -655,7 +660,7 @@ Hasta ahora hemos visto cómo sincronizar el estado del dispositivo mediante pro
 2. Devolver un mensaje de **confirmación (Response)** a la nube para que Ditto sepa que el ESP32 ha recibido y ejecutado la orden.
 
 ### 10.2 El Código (Solución a implementar)
-Debemos actualizar de nuevo la función *callback* `procesa_mensaje`. Ahora deberá distinguir si el mensaje llega por el topic de propiedades o por el de comandos. Reemplaza tu función `procesa_mensaje` por esta versión final:
+Debemos actualizar de nuevo la función *callback* `procesa_mensaje`. Ahora deberá distinguir si el mensaje llega por el topic de propiedades o por el de comandos (cambios en *desiredProperties*). Reemplaza tu función `procesa_mensaje` por esta versión final:
 
 ```cpp
 void procesa_mensaje(char* topic, byte* payload, unsigned int length) { 
